@@ -1,0 +1,10 @@
+{
+    "config": {
+    },
+    "target_overrides": {
+      "*": {
+          "platform.stdio-baud-rate": 115200,
+          "platform.stdio-convert-newlines": false
+       }
+    }
+  }
