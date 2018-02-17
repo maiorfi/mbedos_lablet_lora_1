@@ -9,11 +9,11 @@
 #define RF_FREQUENCY                                    868000000 // Hz
 #define TX_OUTPUT_POWER                                 14        // 14 dBm
   
-#define LORA_BANDWIDTH                              2         // [0: 125 kHz,
+#define LORA_BANDWIDTH                              1         // [0: 125 kHz,
                                                                 //  1: 250 kHz,
                                                                 //  2: 500 kHz,
                                                                 //  3: Reserved]
-#define LORA_SPREADING_FACTOR                       7         // [SF7..SF12]
+#define LORA_SPREADING_FACTOR                       8         // [SF7..SF12]
 #define LORA_CODINGRATE                             1         // [1: 4/5,
                                                                 //  2: 4/6,
                                                                 //  3: 4/7,
@@ -27,8 +27,13 @@
 #define LORA_CRC_ENABLED                            true
 
 // Communication parameters 
-#define RX_TIMEOUT_VALUE                                5000      // in ms
-#define BUFFER_SIZE                                     16        // Define the payload size here
+#define RX_TIMEOUT_VALUE                                2000      // in ms
+#define TX_TIMEOUT_VALUE                                2000      // in ms
+#define BUFFER_SIZE                                     32        // Define the payload size here
+
+#define REQUEST_REPLY_DELAY                             250       // in ms
+#define MAX_SEND_RETRY_CYCLES                           3
+
  
 static InterruptIn btn(BUTTON1);
  
@@ -56,6 +61,7 @@ typedef enum
 static AppStates_t State = INITIAL;
 
 static uint16_t Counter=0, LatestReceivedCounter=0;
+static int s_resend_counter=0;
  
 /*!
  * Radio events function pointer
@@ -67,14 +73,11 @@ static RadioEvents_t RadioEvents;
  */
 static SX1272MB2xAS Radio( NULL );
  
-const uint8_t PingMsg[] = "REQUEST-";
-const uint8_t PongMsg[] = "REPLY-";
+const uint8_t RequestMsg[] = "REQUEST-";
+const uint8_t ReplyMsg[] = "REPLY-";
  
 static uint16_t RxBufferSize = BUFFER_SIZE;
 static uint8_t RxBuffer[BUFFER_SIZE];
-
-static int16_t RssiValue = 0.0;
-static int8_t SnrValue = 0.0;
 
 static Thread s_thread_manage_communication;
 static EventQueue s_eq_manage_communication;
@@ -86,7 +89,7 @@ void event_proc_communication_cycle()
     uint16_t bufferSize=BUFFER_SIZE;
     uint8_t buffer[BUFFER_SIZE];
 
-    uint16_t payloadLen;
+    // uint16_t payloadLen;
 
     s_state_mutex.lock();
     currentState = State;
@@ -105,36 +108,36 @@ void event_proc_communication_cycle()
             break;
 
         case IDLE_RX_WAITING_FOR_REQUEST:
-            //sx1272_debug( "...(waiting for request)...\n" );
+            //sx1272_debug_if( DEBUG_MESSAGE, "...(waiting for request)...\n" );
             break;
 
         case RX_WAITING_FOR_REPLY:
-            sx1272_debug( "...(waiting for reply)...\n" );
+            sx1272_debug_if( DEBUG_MESSAGE, "...(waiting for reply)...\n" );
             break;
 
         case RX_DONE_RECEIVED_REQUEST:
             
             s_state_mutex.lock();
-            sx1272_debug( "*** REQUEST RECEIVED ('%s') ***\n", RxBuffer);
+            sx1272_debug_if( DEBUG_MESSAGE, "*** REQUEST RECEIVED ('%s') ***\n", RxBuffer);
             s_state_mutex.unlock();
 
             // Attesa di durata sufficiente per permettere a chi ha inviato la request di mettersi
             // in ascolto della reply
-            wait_ms(500);
+            wait_ms(REQUEST_REPLY_DELAY);
 
             s_state_mutex.lock();
             State = TX_WAITING_FOR_REPLY_SENT;
             s_state_mutex.unlock();
 
             // Send the next REPLY frame
-            sprintf((char*)buffer, "%s%d",(const char*)PongMsg,LatestReceivedCounter);
+            sprintf((char*)buffer, "%s%d",(const char*)ReplyMsg,LatestReceivedCounter);
             
-            payloadLen=strlen((const char*)buffer) + 1;
+            // payloadLen=strlen((const char*)buffer) + 1;
 
-            if(payloadLen<bufferSize)
-            {
-                memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-            }
+            // if(payloadLen<bufferSize)
+            // {
+            //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+            // }
 
             Radio.Send( buffer, bufferSize );
 
@@ -142,7 +145,7 @@ void event_proc_communication_cycle()
 
         case RX_DONE_RECEIVED_REPLY:
             
-            sx1272_debug( "*** REPLY RECEIVED ***\n\n" );
+            sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ***\n\n" );
 
             s_state_mutex.lock();
             State = INITIAL;
@@ -154,7 +157,7 @@ void event_proc_communication_cycle()
 
         case TX_DONE_SENT_REQUEST:
 
-            sx1272_debug( "...request sent\n" ); 
+            sx1272_debug_if( DEBUG_MESSAGE, "...request sent\n" ); 
            
             s_state_mutex.lock();
             State = RX_WAITING_FOR_REPLY;
@@ -166,7 +169,7 @@ void event_proc_communication_cycle()
 
         case TX_DONE_SENT_REPLY:
 
-            sx1272_debug( "...reply sent\n" ); 
+            sx1272_debug_if( DEBUG_MESSAGE, "...reply sent\n" ); 
            
             s_state_mutex.lock();
             State = INITIAL;
@@ -178,13 +181,13 @@ void event_proc_communication_cycle()
 
         case TX_WAITING_FOR_REQUEST_SENT:
 
-            sx1272_debug( "...waiting for request being sent...\n" ); 
+            sx1272_debug_if( DEBUG_MESSAGE, "...waiting for request being sent...\n" ); 
 
             break;
 
         case TX_WAITING_FOR_REPLY_SENT:
 
-            sx1272_debug( "...waiting for reply being sent...\n" ); 
+            sx1272_debug_if( DEBUG_MESSAGE, "...waiting for reply being sent...\n" ); 
 
             break;
     }
@@ -205,14 +208,17 @@ void event_proc_send_data()
 
     Counter++;
 
-    sx1272_debug( "\n*** SENDING NEW REQUEST : ('%s%d') ***\n",(const char*)PingMsg, Counter );
+    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : ('%s%d') ***\n",(const char*)RequestMsg, Counter );
 
     // Send the next REQUEST frame
-    sprintf((char*)buffer, "%s%d",(const char*)PingMsg, Counter);
+    sprintf((char*)buffer, "%s%d",(const char*)RequestMsg, Counter);
     
-    uint16_t payloadLen=strlen((const char*)buffer)+1;
+    // uint16_t payloadLen=strlen((const char*)buffer)+1;
 
-    if(payloadLen<bufferSize) memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+    // if(payloadLen<bufferSize)
+    // {
+    //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+    // }
 
     Radio.Send( buffer, bufferSize );
 
@@ -232,15 +238,17 @@ void OnTxDone( void )
 
     s_state_mutex.lock();
 
+    s_resend_counter=0;
+
     if(State==TX_WAITING_FOR_REQUEST_SENT)
     {
-        sx1272_debug( "...request tx done...\n" );
+        sx1272_debug_if( DEBUG_MESSAGE, "...request tx done...\n" );
 
         State = TX_DONE_SENT_REQUEST;
     }
     else if (TX_WAITING_FOR_REPLY_SENT)
     {
-        sx1272_debug( "...reply tx done...\n" );
+        sx1272_debug_if( DEBUG_MESSAGE, "...reply tx done...\n" );
 
         State = TX_DONE_SENT_REPLY;
     }
@@ -250,12 +258,9 @@ void OnTxDone( void )
  
 void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
 {
-    sx1272_debug_if( DEBUG_MESSAGE, "> OnRxDone (RSSI:%d, SNR:%d): %s\n", RssiValue, SnrValue, (const char*)payload);
+    sx1272_debug_if( DEBUG_MESSAGE, "> OnRxDone (RSSI:%d, SNR:%d): %s (len: %d) \n", rssi, snr, (const char*)payload, size);
 
     s_state_mutex.lock();
-
-    RssiValue = rssi;
-    SnrValue = snr;
 
     RxBufferSize = size;
 
@@ -263,9 +268,9 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
     {
         memcpy( RxBuffer, payload, size );
 
-        if(State==IDLE_RX_WAITING_FOR_REQUEST && strncmp((const char*)RxBuffer, (const char*)PingMsg, strlen((const char*)PingMsg)) == 0)
+        if(State==IDLE_RX_WAITING_FOR_REQUEST && strncmp((const char*)RxBuffer, (const char*)RequestMsg, strlen((const char*)RequestMsg)) == 0)
         {
-            sx1272_debug( "...request rx done...\n" );
+            sx1272_debug_if( DEBUG_MESSAGE, "...request rx done...\n" );
 
             const char* dashPtr=strchr((const char*)RxBuffer,'-');
 
@@ -280,9 +285,9 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
 
             State = RX_DONE_RECEIVED_REQUEST;
         }
-        else if(State==RX_WAITING_FOR_REPLY && strncmp((const char*)RxBuffer, (const char*)PongMsg, strlen((const char*)PongMsg)) == 0)
+        else if(State==RX_WAITING_FOR_REPLY && strncmp((const char*)RxBuffer, (const char*)ReplyMsg, strlen((const char*)ReplyMsg)) == 0)
         { 
-            sx1272_debug( "...reply rx done...\n" );
+            sx1272_debug_if( DEBUG_MESSAGE, "...reply rx done...\n" );
 
             uint16_t replyCounter=0;
 
@@ -295,18 +300,18 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
 
             if(replyCounter==Counter)
             {
-                sx1272_debug( "...REQUEST<->REPLY MATCH...\n" );
+                sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST<->REPLY MATCH...\n" );
             }            
             else
             {
-                sx1272_debug( "...REQUEST<->REPLY MISMATCH (%d<->%d)...\n", Counter, replyCounter);
+                sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST<->REPLY MISMATCH (%d<->%d)...\n", Counter, replyCounter);
             }
 
             State = RX_DONE_RECEIVED_REPLY;
         }
-        else // valid reception but neither a REQUEST nor a REPLY message
+        else // ricezione valida, ma arrivata in uno stato non previsto
         {   
-            sx1272_debug( "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
+            sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
 
             State = IDLE_RX_WAITING_FOR_REQUEST;
 
@@ -315,7 +320,6 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
     }
 
     s_state_mutex.unlock();
-
 }
  
 void OnTxTimeout( void )
@@ -326,42 +330,52 @@ void OnTxTimeout( void )
     sx1272_debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n" );
 
     s_state_mutex.lock();
-    
-    /*if(State==TX_WAITING_FOR_REQUEST_SENT)
+
+    if(++s_resend_counter<MAX_SEND_RETRY_CYCLES)
     {
-        sx1272_debug( "...tx timeout while waiting for request: re-sending request...\n" );
-
-        // Send the next REQUEST frame
-        sprintf((char*)buffer, "%s%d",(const char*)PingMsg, ++Counter);
-        
-        uint16_t payloadLen=strlen((const char*)buffer)+1;
-
-        if(payloadLen<bufferSize) memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-
-        Radio.Send( buffer, bufferSize );
-    }
-    else if (TX_WAITING_FOR_REPLY_SENT)
-    {
-        sx1272_debug( "...tx timeout while waiting for reply: re-sending reply...\n" );
-
-        // Send the next REPLY frame
-        sprintf((char*)buffer, "%s%d",(const char*)PongMsg,LatestReceivedCounter);
-        
-        uint16_t payloadLen=strlen((const char*)buffer) + 1;
-
-        if(payloadLen<bufferSize)
+        if(State==TX_WAITING_FOR_REQUEST_SENT)
         {
-            memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+            sx1272_debug_if( DEBUG_MESSAGE, "...tx timeout while waiting for request: re-sending request (retry #)...\n", s_resend_counter);
+
+            // Send the next REQUEST frame
+            sprintf((char*)buffer, "%s%d",(const char*)RequestMsg, Counter);
+            
+            // uint16_t payloadLen=strlen((const char*)buffer)+1;
+
+            // if(payloadLen<bufferSize)
+            // {
+            //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+            // }
+
+            Radio.Send( buffer, bufferSize );
         }
+        else if (TX_WAITING_FOR_REPLY_SENT)
+        {
+            sx1272_debug_if( DEBUG_MESSAGE, "...tx timeout while waiting for reply: re-sending reply...\n" );
 
-        Radio.Send( buffer, bufferSize );
-    }*/
+            // Send the next REPLY frame
+            sprintf((char*)buffer, "%s%d",(const char*)ReplyMsg,LatestReceivedCounter);
+            
+            // uint16_t payloadLen=strlen((const char*)buffer) + 1;
 
-    State=IDLE_RX_WAITING_FOR_REQUEST;
+            // if(payloadLen<bufferSize)
+            // {
+            //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+            // }
+
+            Radio.Send( buffer, bufferSize );
+        }
+    }
+    else
+    {
+        s_resend_counter=0;
+
+        State=IDLE_RX_WAITING_FOR_REQUEST;
+
+        Radio.Rx(RX_TIMEOUT_VALUE);
+    }
     
     s_state_mutex.unlock();
-
-    Radio.Rx(RX_TIMEOUT_VALUE);
 }
  
 void OnRxTimeout( void )
@@ -404,7 +418,7 @@ void OnRxError( void )
 
 int main( void ) 
 {
-    sx1272_debug("LoRa Request/Reply Demo Application (blue button to send acked message)");
+    sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send acked message)");
  
     // Initialize Radio driver
 
@@ -418,7 +432,7 @@ int main( void )
     // verify the connection with the board
     while( Radio.Read( REG_VERSION ) == 0x00  )
     {
-        sx1272_debug( "Radio could not be detected!\n", NULL );
+        sx1272_debug_if( DEBUG_MESSAGE, "Radio could not be detected!\n", NULL );
         wait( 1 );
     }
  
@@ -433,7 +447,7 @@ int main( void )
                          LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                          LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
                          LORA_CRC_ENABLED, LORA_FHSS_ENABLED, LORA_NB_SYMB_HOP,
-                         LORA_IQ_INVERSION_ON, 2000 );
+                         LORA_IQ_INVERSION_ON, TX_TIMEOUT_VALUE );
  
     Radio.SetRxConfig( MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
                          LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
