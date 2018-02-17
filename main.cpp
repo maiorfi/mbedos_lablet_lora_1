@@ -32,7 +32,6 @@
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
 #define REQUEST_REPLY_DELAY                             250       // in ms
-#define MAX_SEND_RETRY_CYCLES                           3
 
  
 static InterruptIn btn(BUTTON1);
@@ -60,8 +59,12 @@ typedef enum
  
 static AppStates_t State = INITIAL;
 
-static uint16_t Counter=0, LatestReceivedCounter=0;
-static int s_resend_counter=0;
+Ticker s_ticker;
+
+static uint16_t Counter=0, LatestReceivedRequestCounter=0, LatestReceivedReplyCounter=0;
+static uint8_t LatestReceivedRequestDestinationAddress=0, LatestReceivedRequestSourceAddress=0;
+static uint8_t LatestReceivedReplyDestinationAddress=0, LatestReceivedReplySourceAddress=0;
+static uint8_t MyAddress;
  
 /*!
  * Radio events function pointer
@@ -89,7 +92,7 @@ void event_proc_communication_cycle()
     uint16_t bufferSize=BUFFER_SIZE;
     uint8_t buffer[BUFFER_SIZE];
 
-    // uint16_t payloadLen;
+    uint16_t payloadLen;
 
     s_state_mutex.lock();
     currentState = State;
@@ -98,6 +101,8 @@ void event_proc_communication_cycle()
     switch( currentState )
     {
         case INITIAL:
+
+            Radio.Sleep();
 
             s_state_mutex.lock();
             State = IDLE_RX_WAITING_FOR_REQUEST;
@@ -116,28 +121,49 @@ void event_proc_communication_cycle()
             break;
 
         case RX_DONE_RECEIVED_REQUEST:
+
+            uint8_t latestReceivedRequestDestinationAddress, latestReceivedRequestSourceAddress;
+            uint16_t latestReceivedRequestCounter;
             
             s_state_mutex.lock();
             sx1272_debug_if( DEBUG_MESSAGE, "*** REQUEST RECEIVED ('%s') ***\n", RxBuffer);
+            latestReceivedRequestDestinationAddress=LatestReceivedRequestDestinationAddress;
+            latestReceivedRequestSourceAddress=LatestReceivedRequestSourceAddress;
+            latestReceivedRequestCounter=LatestReceivedRequestCounter;
+            s_state_mutex.unlock();
+
+            if(latestReceivedRequestDestinationAddress!=MyAddress)
+            {
+                sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me...\n");
+
+                Radio.Sleep();
+
+                s_state_mutex.lock();
+                State = IDLE_RX_WAITING_FOR_REQUEST;
+                s_state_mutex.unlock();
+
+                Radio.Rx(RX_TIMEOUT_VALUE);
+                
+                break;
+            }
+
+            s_state_mutex.lock();
+            State = TX_WAITING_FOR_REPLY_SENT;
             s_state_mutex.unlock();
 
             // Attesa di durata sufficiente per permettere a chi ha inviato la request di mettersi
             // in ascolto della reply
             wait_ms(REQUEST_REPLY_DELAY);
 
-            s_state_mutex.lock();
-            State = TX_WAITING_FOR_REPLY_SENT;
-            s_state_mutex.unlock();
-
             // Send the next REPLY frame
-            sprintf((char*)buffer, "%s%d",(const char*)ReplyMsg,LatestReceivedCounter);
+            sprintf((char*)buffer, "%s%u|%u|%u",(const char*)ReplyMsg, latestReceivedRequestCounter, MyAddress, latestReceivedRequestSourceAddress);
             
-            // payloadLen=strlen((const char*)buffer) + 1;
+            payloadLen=strlen((const char*)buffer) + 1;
 
-            // if(payloadLen<bufferSize)
-            // {
-            //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-            // }
+            if(payloadLen<bufferSize)
+            {
+                memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+            }
 
             Radio.Send( buffer, bufferSize );
 
@@ -145,19 +171,46 @@ void event_proc_communication_cycle()
 
         case RX_DONE_RECEIVED_REPLY:
             
-            sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ***\n\n" );
+            uint8_t latestReceivedReplyDestinationAddress, latestReceivedReplySourceAddress;
+            uint16_t latestReceivedReplyCounter, counter;
+            
+            s_state_mutex.lock();
+            sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ('%s') ***\n", RxBuffer);
+            latestReceivedReplyDestinationAddress=LatestReceivedReplyDestinationAddress;
+            latestReceivedReplySourceAddress=LatestReceivedReplySourceAddress;
+            latestReceivedReplyCounter=LatestReceivedReplyCounter;
+            counter=Counter;
+            s_state_mutex.unlock();
+
+            if(latestReceivedReplyDestinationAddress==MyAddress)
+            {
+                sx1272_debug_if( DEBUG_MESSAGE, "...reply is for me...\n");
+
+                if(latestReceivedReplyCounter==counter)
+                {
+                    sx1272_debug_if( DEBUG_MESSAGE, "REPLY MATCHES\n");
+                }
+                else
+                {
+                    sx1272_debug_if( DEBUG_MESSAGE, "REPLY DOES NOT MATCH REQUEST (REQUEST: %u, REPLY: %u)\n",counter, latestReceivedReplyCounter);
+                }
+            }
+            else
+            {
+                sx1272_debug_if( DEBUG_MESSAGE, "...reply is not for me...\n");
+            }
 
             s_state_mutex.lock();
             State = INITIAL;
             s_state_mutex.unlock();
 
-            Radio.Sleep();
-
             break;
 
         case TX_DONE_SENT_REQUEST:
 
-            sx1272_debug_if( DEBUG_MESSAGE, "...request sent\n" ); 
+            sx1272_debug_if( DEBUG_MESSAGE, "...request sent\n" );
+
+            Radio.Sleep();
            
             s_state_mutex.lock();
             State = RX_WAITING_FOR_REPLY;
@@ -175,8 +228,6 @@ void event_proc_communication_cycle()
             State = INITIAL;
             s_state_mutex.unlock();
 
-            Radio.Sleep();
-
             break;
 
         case TX_WAITING_FOR_REQUEST_SENT:
@@ -193,6 +244,9 @@ void event_proc_communication_cycle()
     }
 }
 
+static uint8_t DestinationAddress=0;
+#define MAX_DESTINATION_ADDRESS 4
+
 void event_proc_send_data()
 {
     uint16_t bufferSize=BUFFER_SIZE;
@@ -200,29 +254,33 @@ void event_proc_send_data()
 
     AppStates_t currentState;
 
+    uint16_t counter;
+    uint8_t destinationAddress;
+
     s_state_mutex.lock();
     currentState=State;
+    destinationAddress=DestinationAddress;
+    counter=++Counter;
     s_state_mutex.unlock();
 
     if(currentState!=IDLE_RX_WAITING_FOR_REQUEST) return;
 
-    Counter++;
-
-    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : ('%s%d') ***\n",(const char*)RequestMsg, Counter );
+    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : ('%s%u|%u|%u') ***\n",(const char*)RequestMsg, counter, MyAddress, destinationAddress );
 
     // Send the next REQUEST frame
-    sprintf((char*)buffer, "%s%d",(const char*)RequestMsg, Counter);
+    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, counter, MyAddress, destinationAddress);
     
-    // uint16_t payloadLen=strlen((const char*)buffer)+1;
+    uint16_t payloadLen=strlen((const char*)buffer)+1;
 
-    // if(payloadLen<bufferSize)
-    // {
-    //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-    // }
+    if(payloadLen<bufferSize)
+    {
+        memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
+    }
 
     Radio.Send( buffer, bufferSize );
 
     s_state_mutex.lock();
+    if(++DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
     State=TX_WAITING_FOR_REQUEST_SENT;
     s_state_mutex.unlock();
 }
@@ -237,8 +295,6 @@ void OnTxDone( void )
     sx1272_debug_if( DEBUG_MESSAGE, "> OnTxDone\n" );
 
     s_state_mutex.lock();
-
-    s_resend_counter=0;
 
     if(State==TX_WAITING_FOR_REQUEST_SENT)
     {
@@ -272,15 +328,35 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
         {
             sx1272_debug_if( DEBUG_MESSAGE, "...request rx done...\n" );
 
-            const char* dashPtr=strchr((const char*)RxBuffer,'-');
+            char* dashPtr=NULL;
+            char* pipePtr1=NULL;
+            char* pipePtr2=NULL;
 
-            if(dashPtr && dashPtr-((const char*)RxBuffer)>0)
+            dashPtr=strchr((const char*)RxBuffer,'-');
+
+            if(dashPtr)
             {
-                LatestReceivedCounter=atoi(dashPtr+1);
+                pipePtr1=strchr(dashPtr+1,'|');
+
+                if(pipePtr1)
+                {
+                    pipePtr2=strchr(pipePtr1+1,'|');
+                }
+            }
+            
+            if(dashPtr && pipePtr1 && pipePtr2)
+            {
+                *pipePtr1='\0';
+                *pipePtr2='\0';
+                LatestReceivedRequestCounter=atoi(dashPtr+1);
+                LatestReceivedRequestSourceAddress=atoi(pipePtr1+1);
+                LatestReceivedRequestDestinationAddress=atoi(pipePtr2+1);
+                *pipePtr1='|';
+                *pipePtr2='|';
             }
             else
             {
-                LatestReceivedCounter=0;
+                LatestReceivedRequestCounter=0;
             }
 
             State = RX_DONE_RECEIVED_REQUEST;
@@ -289,22 +365,35 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
         { 
             sx1272_debug_if( DEBUG_MESSAGE, "...reply rx done...\n" );
 
-            uint16_t replyCounter=0;
+            char* dashPtr=NULL;
+            char* pipePtr1=NULL;
+            char* pipePtr2=NULL;
 
-            const char* dashPtr=strchr((const char*)RxBuffer,'-');
+            dashPtr=strchr((const char*)RxBuffer,'-');
 
-            if(dashPtr && dashPtr-((const char*)RxBuffer)>0)
+            if(dashPtr)
             {
-                replyCounter=atoi(dashPtr+1);
+                pipePtr1=strchr(dashPtr+1,'|');
+
+                if(pipePtr1)
+                {
+                    pipePtr2=strchr(pipePtr1+1,'|');
+                }
             }
-
-            if(replyCounter==Counter)
+            
+            if(dashPtr && pipePtr1 && pipePtr2)
             {
-                sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST<->REPLY MATCH...\n" );
-            }            
+                *pipePtr1='\0';
+                *pipePtr2='\0';
+                LatestReceivedReplyCounter=atoi(dashPtr+1);
+                LatestReceivedReplySourceAddress=atoi(pipePtr1+1);
+                LatestReceivedReplyDestinationAddress=atoi(pipePtr2+1);
+                *pipePtr1='|';
+                *pipePtr2='|';
+            }
             else
             {
-                sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST<->REPLY MISMATCH (%d<->%d)...\n", Counter, replyCounter);
+                LatestReceivedReplyCounter=0;
             }
 
             State = RX_DONE_RECEIVED_REPLY;
@@ -312,6 +401,8 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
         else // ricezione valida, ma arrivata in uno stato non previsto
         {   
             sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
+            
+            Radio.Sleep();
 
             State = IDLE_RX_WAITING_FOR_REQUEST;
 
@@ -324,58 +415,15 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
  
 void OnTxTimeout( void )
 {
-    uint16_t bufferSize=BUFFER_SIZE;
-    uint8_t buffer[BUFFER_SIZE];
-    
     sx1272_debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n" );
 
+    Radio.Sleep();
+
     s_state_mutex.lock();
-
-    if(++s_resend_counter<MAX_SEND_RETRY_CYCLES)
-    {
-        if(State==TX_WAITING_FOR_REQUEST_SENT)
-        {
-            sx1272_debug_if( DEBUG_MESSAGE, "...tx timeout while waiting for request: re-sending request (retry #)...\n", s_resend_counter);
-
-            // Send the next REQUEST frame
-            sprintf((char*)buffer, "%s%d",(const char*)RequestMsg, Counter);
-            
-            // uint16_t payloadLen=strlen((const char*)buffer)+1;
-
-            // if(payloadLen<bufferSize)
-            // {
-            //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-            // }
-
-            Radio.Send( buffer, bufferSize );
-        }
-        else if (TX_WAITING_FOR_REPLY_SENT)
-        {
-            sx1272_debug_if( DEBUG_MESSAGE, "...tx timeout while waiting for reply: re-sending reply...\n" );
-
-            // Send the next REPLY frame
-            sprintf((char*)buffer, "%s%d",(const char*)ReplyMsg,LatestReceivedCounter);
-            
-            // uint16_t payloadLen=strlen((const char*)buffer) + 1;
-
-            // if(payloadLen<bufferSize)
-            // {
-            //     memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-            // }
-
-            Radio.Send( buffer, bufferSize );
-        }
-    }
-    else
-    {
-        s_resend_counter=0;
-
-        State=IDLE_RX_WAITING_FOR_REQUEST;
-
-        Radio.Rx(RX_TIMEOUT_VALUE);
-    }
-    
+    State=IDLE_RX_WAITING_FOR_REQUEST;
     s_state_mutex.unlock();
+
+    Radio.Rx(RX_TIMEOUT_VALUE);
 }
  
 void OnRxTimeout( void )
@@ -398,6 +446,8 @@ void OnRxTimeout( void )
 
     sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: resetting state to idle...\n" );
 
+    Radio.Sleep();
+
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
  
@@ -412,13 +462,17 @@ void OnRxError( void )
     s_state_mutex.unlock();
 
     sx1272_debug_if( DEBUG_MESSAGE, "...rx error: resetting state to idle...\n" );
-
-    Radio.Sleep();
 }
 
 int main( void ) 
 {
-    sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send acked message)");
+    // sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send acked message)\n");
+
+    srand(time(NULL));
+
+    MyAddress = 1 + rand() % MAX_DESTINATION_ADDRESS;
+
+    sx1272_debug_if( DEBUG_MESSAGE,"^^^ MY_ADDRESS: %u ^^^\n", MyAddress);
  
     // Initialize Radio driver
 
