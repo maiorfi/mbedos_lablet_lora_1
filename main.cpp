@@ -65,6 +65,9 @@ static uint16_t Counter=0, LatestReceivedRequestCounter=0, LatestReceivedReplyCo
 static uint8_t LatestReceivedRequestDestinationAddress=0, LatestReceivedRequestSourceAddress=0;
 static uint8_t LatestReceivedReplyDestinationAddress=0, LatestReceivedReplySourceAddress=0;
 static uint8_t MyAddress;
+
+DigitalIn address_in_bit_0(PH_0, PullUp);
+DigitalIn address_in_bit_1(PH_1, PullUp);
  
 /*!
  * Radio events function pointer
@@ -136,16 +139,14 @@ void event_proc_communication_cycle()
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me...\n");
 
-                Radio.Sleep();
-
                 s_state_mutex.lock();
-                State = IDLE_RX_WAITING_FOR_REQUEST;
+                State = INITIAL;
                 s_state_mutex.unlock();
-
-                Radio.Rx(RX_TIMEOUT_VALUE);
                 
                 break;
             }
+
+            sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST IS FOR ME...\n");
 
             s_state_mutex.lock();
             State = TX_WAITING_FOR_REPLY_SENT;
@@ -182,22 +183,22 @@ void event_proc_communication_cycle()
             counter=Counter;
             s_state_mutex.unlock();
 
-            if(latestReceivedReplyDestinationAddress==MyAddress)
+            if(latestReceivedReplyDestinationAddress!=MyAddress)
             {
-                sx1272_debug_if( DEBUG_MESSAGE, "...reply is for me...\n");
-
-                if(latestReceivedReplyCounter==counter)
-                {
-                    sx1272_debug_if( DEBUG_MESSAGE, "REPLY MATCHES\n");
-                }
-                else
-                {
-                    sx1272_debug_if( DEBUG_MESSAGE, "REPLY DOES NOT MATCH REQUEST (REQUEST: %u, REPLY: %u)\n",counter, latestReceivedReplyCounter);
-                }
+                sx1272_debug_if( DEBUG_MESSAGE, "...reply is not for me...\n");
             }
             else
             {
-                sx1272_debug_if( DEBUG_MESSAGE, "...reply is not for me...\n");
+                sx1272_debug_if( DEBUG_MESSAGE, "...REPLY IS FOR ME...\n");
+
+                if(latestReceivedReplyCounter==counter)
+                {
+                    sx1272_debug_if( DEBUG_MESSAGE, "...AND REPLY IS RIGHT\n");
+                }
+                else
+                {
+                    sx1272_debug_if( DEBUG_MESSAGE, "...BUT REPLY IS WRONG (REQUEST: %u, REPLY: %u)\n",counter, latestReceivedReplyCounter);
+                }
             }
 
             s_state_mutex.lock();
@@ -222,7 +223,7 @@ void event_proc_communication_cycle()
 
         case TX_DONE_SENT_REPLY:
 
-            sx1272_debug_if( DEBUG_MESSAGE, "...reply sent\n" ); 
+            sx1272_debug_if( DEBUG_MESSAGE, "...REPLY SENT\n" ); 
            
             s_state_mutex.lock();
             State = INITIAL;
@@ -280,7 +281,9 @@ void event_proc_send_data()
     Radio.Send( buffer, bufferSize );
 
     s_state_mutex.lock();
-    if(++DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
+    DestinationAddress++;
+    if(DestinationAddress==MyAddress) DestinationAddress++;
+    if(DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
     State=TX_WAITING_FOR_REQUEST_SENT;
     s_state_mutex.unlock();
 }
@@ -402,11 +405,7 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
         {   
             sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
             
-            Radio.Sleep();
-
-            State = IDLE_RX_WAITING_FOR_REQUEST;
-
-            Radio.Rx(RX_TIMEOUT_VALUE);
+            State = INITIAL;
         }
     }
 
@@ -438,16 +437,15 @@ void OnRxTimeout( void )
 
     if(currentState!=IDLE_RX_WAITING_FOR_REQUEST && currentState!=RX_WAITING_FOR_REPLY) return;
 
+    sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: resetting state to idle...\n" );
+
     s_state_mutex.lock();
     memset(RxBuffer,0x00,BUFFER_SIZE);
     RxBufferSize=0;
     State = IDLE_RX_WAITING_FOR_REQUEST;
     s_state_mutex.unlock();
 
-    sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: resetting state to idle...\n" );
-
     Radio.Sleep();
-
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
  
@@ -466,13 +464,13 @@ void OnRxError( void )
 
 int main( void ) 
 {
-    // sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send acked message)\n");
+    sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send acked message)\n");
 
-    srand(time(NULL));
+    MyAddress=1 + (address_in_bit_0.read() ? 0 : 1) +  (address_in_bit_1.read() ? 0 : 2);
 
-    MyAddress = 1 + rand() % MAX_DESTINATION_ADDRESS;
-
-    sx1272_debug_if( DEBUG_MESSAGE,"^^^ MY_ADDRESS: %u ^^^\n", MyAddress);
+    sx1272_debug_if( DEBUG_MESSAGE,"\n\n---------------------\n");
+    sx1272_debug_if( DEBUG_MESSAGE,"|   MY_ADDRESS: %u   |\n", MyAddress);
+    sx1272_debug_if( DEBUG_MESSAGE,"---------------------\n\n");
  
     // Initialize Radio driver
 

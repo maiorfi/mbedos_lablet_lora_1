@@ -15,8 +15,7 @@ void OnProjectLoad (void) {
   Project.SetDevice ("STM32F401RE");
   Project.SetHostIF ("USB", "");
   Project.SetTargetIF ("SWD");
-  Project.SetTIFSpeed ("10 MHz");
-  Project.AddSvdFile ("Cortex-M4F.svd");
+  Project.SetTIFSpeed ("20 MHz");
   Project.AddSvdFile ("D:/Progetti/Lab/mBed/cmsis-svd/data/STMicro/STM32F40x.svd");
   //
   // User settings
@@ -76,7 +75,9 @@ void OnProjectLoad (void) {
 *       AfterTargetReset                                              
 *                                                                     
 * Function description                                                
-*   Event handler routine. Optional.                                  
+*   Event handler routine.                                            
+*    - Sets the PC register to program reset value.                   
+*    - Sets the SP register to program reset value on Cortex-M.       
 *                                                                     
 **********************************************************************
 */                                                                    
@@ -161,11 +162,8 @@ void OnProjectLoad (void) {
 *                                                                     
 * Function description                                                
 *   Event handler routine.                                            
-*                                                                     
-* Notes                                                               
-*   This sample implementation demonstrates the application           
-*   initialization on a Cortex-M target.                              
-*   If no initialization can be done, Target.Reset() may be called.   
+*    - Sets the PC register to program reset value.                   
+*    - Sets the SP register to program reset value on Cortex-M.       
 *                                                                     
 **********************************************************************
 */                                                                    
