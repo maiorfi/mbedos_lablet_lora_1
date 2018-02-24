@@ -63,11 +63,16 @@ void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize)
 {
     ++Counter;
 
-    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress);
-
     DestinationAddress++;
     if(DestinationAddress==MyAddress) DestinationAddress++;
     if(DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
+
+    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress);
+}
+
+bool protocol_should_i_wait_for_reply_for_latest_sent_request()
+{
+    return DestinationAddress!=0;
 }
 
 void protocol_process_received_data(uint8_t *payload, uint16_t size)

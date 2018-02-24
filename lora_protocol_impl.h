@@ -12,6 +12,7 @@ void protocol_reset();
 
 bool protocol_is_latest_received_request_for_me();
 bool protocol_should_i_reply_to_latest_received_request();
+bool protocol_should_i_wait_for_reply_for_latest_sent_request();
 bool protocol_is_latest_received_reply_for_me();
 void protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize);
 bool protocol_is_latest_received_reply_right();

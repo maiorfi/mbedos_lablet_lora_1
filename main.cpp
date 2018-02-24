@@ -1,6 +1,9 @@
 #include "mbed.h"
 #include "main.h"
 #include "sx1272-hal.h"
+
+#define SX1272_DEBUG
+
 #include "sx1272-debug.h"
 
 #include "lora_protocol_impl.h"
@@ -33,7 +36,7 @@
 #define TX_TIMEOUT_VALUE                                1000      // in ms
 #define RADIO_MESSAGES_BUFFER_SIZE                      32        // Define the payload size here
 
-#define REQUEST_REPLY_DELAY                             250       // in ms
+#define REQUEST_REPLY_DELAY                             50       // in ms
 
 #define STATE_MACHINE_STALE_STATE_TIMEOUT               (RX_TIMEOUT_VALUE+1000)      // in ms
 
@@ -112,6 +115,8 @@ void event_proc_communication_cycle()
     switch( State )
     {
         case INITIAL:
+
+            sx1272_debug_if( DEBUG_MESSAGE, "--- INITIAL STATE ---\n");
 
             Radio.Sleep();
 
@@ -203,12 +208,23 @@ void event_proc_communication_cycle()
 
         case TX_DONE_SENT_REQUEST:
 
-            sx1272_debug_if( DEBUG_MESSAGE, "...request sent\n" );
+            sx1272_debug_if( DEBUG_MESSAGE, "...request sent...\n" );
 
             Radio.Sleep();
-           
-            State = RX_WAITING_FOR_REPLY;
+
+            if(!protocol_should_i_wait_for_reply_for_latest_sent_request())
+            {
+                sx1272_debug_if( DEBUG_MESSAGE, "...but I should not wait for reply\n" );
+
+                State = INITIAL;
+
+                break;
+            }
+
+            sx1272_debug_if( DEBUG_MESSAGE, "...waiting for reply...\n" );
             
+            State = RX_WAITING_FOR_REPLY;
+
             Radio.Rx(RX_TIMEOUT_VALUE);
 
             break;
