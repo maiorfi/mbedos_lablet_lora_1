@@ -2,6 +2,8 @@
 #include "main.h"
 #include "sx1272-hal.h"
 #include "sx1272-debug.h"
+
+#include "lora_protocol_impl.h"
  
 /* Set this flag to '1' to display debug messages on the console */
 #define DEBUG_MESSAGE   1
@@ -29,7 +31,7 @@
 // Communication parameters 
 #define RX_TIMEOUT_VALUE                                2000      // in ms
 #define TX_TIMEOUT_VALUE                                1000      // in ms
-#define BUFFER_SIZE                                     32        // Define the payload size here
+#define RADIO_MESSAGES_BUFFER_SIZE                      32        // Define the payload size here
 
 #define REQUEST_REPLY_DELAY                             250       // in ms
 
@@ -65,13 +67,8 @@ static AppStates_t State = INITIAL;
 
 Ticker s_ticker;
 
-static uint16_t Counter=0, LatestReceivedRequestCounter=0, LatestReceivedReplyCounter=0;
-static uint8_t LatestReceivedRequestDestinationAddress=0, LatestReceivedRequestSourceAddress=0;
-static uint8_t LatestReceivedReplyDestinationAddress=0, LatestReceivedReplySourceAddress=0;
-static uint8_t MyAddress;
-
-DigitalIn address_in_bit_0(PH_0, PullUp);
-DigitalIn address_in_bit_1(PH_1, PullUp);
+static DigitalIn address_in_bit_0(PH_0, PullUp);
+static DigitalIn address_in_bit_1(PH_1, PullUp);
  
 /*!
  * Radio events function pointer
@@ -82,18 +79,9 @@ static RadioEvents_t RadioEvents;
  *  Global variables declarations
  */
 static SX1272MB2xAS Radio( NULL );
- 
-const uint8_t RequestMsg[] = "REQUEST-";
-const uint8_t ReplyMsg[] = "REPLY-";
- 
-static uint16_t RxBufferSize = BUFFER_SIZE;
-static uint8_t RxBuffer[BUFFER_SIZE];
 
 static Thread s_thread_manage_communication;
 static EventQueue s_eq_manage_communication;
-
-static uint8_t DestinationAddress=0;
-#define MAX_DESTINATION_ADDRESS 4
 
 void event_proc_communication_cycle()
 {
@@ -101,8 +89,8 @@ void event_proc_communication_cycle()
     static Timer s_state_timer;
     static int stateChangeTimeStamp;
 
-    uint16_t bufferSize=BUFFER_SIZE;
-    uint8_t buffer[BUFFER_SIZE];
+    uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
+    uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
     if(previousState!=State)
     {
@@ -125,8 +113,8 @@ void event_proc_communication_cycle()
 
             Radio.Sleep();
 
-            memset(RxBuffer,0x00,BUFFER_SIZE);
-            RxBufferSize=0;
+            protocol_reset();
+            
             State = IDLE_RX_WAITING_FOR_REQUEST;
             
             Radio.Rx(RX_TIMEOUT_VALUE);
@@ -145,7 +133,7 @@ void event_proc_communication_cycle()
 
             sx1272_debug_if( DEBUG_MESSAGE, "*** REQUEST RECEIVED ('%s') ***\n", RxBuffer);
             
-            if(LatestReceivedRequestDestinationAddress!=MyAddress)
+            if(!protocol_is_latest_received_request_for_me())
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me...\n");
 
@@ -162,8 +150,8 @@ void event_proc_communication_cycle()
             // in ascolto della reply
             wait_ms(REQUEST_REPLY_DELAY);
 
-            // Send the next REPLY frame
-            sprintf((char*)buffer, "%s%u|%u|%u",(const char*)ReplyMsg, LatestReceivedRequestCounter, MyAddress, LatestReceivedRequestSourceAddress);
+            // Send the REPLY frame
+            protocol_fill_create_reply_buffer(buffer, bufferSize);
 
             Radio.Send( buffer, bufferSize );
 
@@ -173,7 +161,7 @@ void event_proc_communication_cycle()
             
             sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ('%s') ***\n", RxBuffer);
             
-            if(LatestReceivedReplyDestinationAddress!=MyAddress)
+            if(!protocol_is_latest_received_reply_for_me())
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...reply is not for me...\n");
             }
@@ -181,12 +169,13 @@ void event_proc_communication_cycle()
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...REPLY IS FOR ME...\n");
 
-                if(LatestReceivedReplyCounter==Counter)
+                if(protocol_is_latest_received_reply_right())
                 {
                     sx1272_debug_if( DEBUG_MESSAGE, "...AND REPLY IS RIGHT\n");
                 }
                 else
                 {
+                    // TODO : la diagnostica qui richiede di condividere stato interno del protocollo...HACK!
                     sx1272_debug_if( DEBUG_MESSAGE, "...BUT REPLY IS WRONG (REQUEST: %u, REPLY: %u)\n", Counter, LatestReceivedReplyCounter);
                 }
             }
@@ -231,24 +220,24 @@ void event_proc_communication_cycle()
 
 void event_proc_send_data()
 {
-    uint16_t bufferSize=BUFFER_SIZE;
-    uint8_t buffer[BUFFER_SIZE];
+    uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
+    uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    ++Counter;
-    
     if(State!=IDLE_RX_WAITING_FOR_REQUEST) return;
 
-    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : ('%s%u|%u|%u') ***\n",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress );
+    // Send the REQUEST frame
+    protocol_fill_create_request_buffer(buffer, bufferSize);
 
-    // Send the next REQUEST frame
-    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress);
+    size_t dumpBufferSize=bufferSize;
+    char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
+
+    protocol_fill_request_dump_as_string_buffer(dumpBuffer, buffer, dumpBufferSize);
+
+    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : ('%s') ***\n", dumpBuffer);
+
+    State=TX_WAITING_FOR_REQUEST_SENT;
 
     Radio.Send( buffer, bufferSize );
-
-    DestinationAddress++;
-    if(DestinationAddress==MyAddress) DestinationAddress++;
-    if(DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
-    State=TX_WAITING_FOR_REQUEST_SENT;
 }
 
 void btn_interrupt_handler()
@@ -274,96 +263,36 @@ void OnTxDone( void )
     }
 }
  
-void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
+void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnRxDone (RSSI:%d, SNR:%d): %s (len: %d) \n", rssi, snr, (const char*)payload, size);
 
-    RxBufferSize = size;
+    if( size == 0 ) return;
+    
+    protocol_process_received_data(payload, size);
 
-    if( size > 0 )
+    if(State==IDLE_RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
     {
-        memcpy( RxBuffer, payload, size );
+        sx1272_debug_if( DEBUG_MESSAGE, "...request rx done...\n" );
 
-        if(State==IDLE_RX_WAITING_FOR_REQUEST && strncmp((const char*)RxBuffer, (const char*)RequestMsg, strlen((const char*)RequestMsg)) == 0)
-        {
-            sx1272_debug_if( DEBUG_MESSAGE, "...request rx done...\n" );
+        protocol_process_received_data_as_request();
 
-            char* dashPtr=NULL;
-            char* pipePtr1=NULL;
-            char* pipePtr2=NULL;
+        State = RX_DONE_RECEIVED_REQUEST;
+    }
+    else if(State==RX_WAITING_FOR_REPLY && protocol_is_received_data_a_reply())
+    { 
+        sx1272_debug_if( DEBUG_MESSAGE, "...reply rx done...\n" );
 
-            dashPtr=strchr((const char*)RxBuffer,'-');
+        protocol_process_received_data_as_reply();
 
-            if(dashPtr)
-            {
-                pipePtr1=strchr(dashPtr+1,'|');
-
-                if(pipePtr1)
-                {
-                    pipePtr2=strchr(pipePtr1+1,'|');
-                }
-            }
-            
-            if(dashPtr && pipePtr1 && pipePtr2)
-            {
-                *pipePtr1='\0';
-                *pipePtr2='\0';
-                LatestReceivedRequestCounter=atoi(dashPtr+1);
-                LatestReceivedRequestSourceAddress=atoi(pipePtr1+1);
-                LatestReceivedRequestDestinationAddress=atoi(pipePtr2+1);
-                *pipePtr1='|';
-                *pipePtr2='|';
-            }
-            else
-            {
-                LatestReceivedRequestCounter=0;
-            }
-
-            State = RX_DONE_RECEIVED_REQUEST;
-        }
-        else if(State==RX_WAITING_FOR_REPLY && strncmp((const char*)RxBuffer, (const char*)ReplyMsg, strlen((const char*)ReplyMsg)) == 0)
-        { 
-            sx1272_debug_if( DEBUG_MESSAGE, "...reply rx done...\n" );
-
-            char* dashPtr=NULL;
-            char* pipePtr1=NULL;
-            char* pipePtr2=NULL;
-
-            dashPtr=strchr((const char*)RxBuffer,'-');
-
-            if(dashPtr)
-            {
-                pipePtr1=strchr(dashPtr+1,'|');
-
-                if(pipePtr1)
-                {
-                    pipePtr2=strchr(pipePtr1+1,'|');
-                }
-            }
-            
-            if(dashPtr && pipePtr1 && pipePtr2)
-            {
-                *pipePtr1='\0';
-                *pipePtr2='\0';
-                LatestReceivedReplyCounter=atoi(dashPtr+1);
-                LatestReceivedReplySourceAddress=atoi(pipePtr1+1);
-                LatestReceivedReplyDestinationAddress=atoi(pipePtr2+1);
-                *pipePtr1='|';
-                *pipePtr2='|';
-            }
-            else
-            {
-                LatestReceivedReplyCounter=0;
-            }
-
-            State = RX_DONE_RECEIVED_REPLY;
-        }
-        else // ricezione valida, ma arrivata in uno stato non previsto
-        {   
-            sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
-            
-            State = INITIAL;
-        }
+        State = RX_DONE_RECEIVED_REPLY;
+    }
+    else // ricezione valida, ma arrivata in uno stato non previsto
+    {   
+        // TODO : la diagnostica qui richiede di condividere stato interno del protocollo...HACK!
+        sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
+        
+        State = INITIAL;
     }
 }
  
@@ -404,13 +333,17 @@ void OnRxError( void )
 
 int main( void ) 
 {
-    sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send acked message)\n");
+    sx1272_debug_if( DEBUG_MESSAGE,"LoRa Request/Reply Demo Application (blue button to send a new request)\n");
 
-    MyAddress=1 + (address_in_bit_0.read() ? 0 : 1) +  (address_in_bit_1.read() ? 0 : 2);
+    uint8_t myAddress;
+
+    myAddress = 1 + (address_in_bit_0.read() ? 0 : 1) +  (address_in_bit_1.read() ? 0 : 2);
 
     sx1272_debug_if( DEBUG_MESSAGE,"\n\n---------------------\n");
-    sx1272_debug_if( DEBUG_MESSAGE,"|   MY_ADDRESS: %u   |\n", MyAddress);
+    sx1272_debug_if( DEBUG_MESSAGE,"|   MY_ADDRESS: %u   |\n", myAddress);
     sx1272_debug_if( DEBUG_MESSAGE,"---------------------\n\n");
+
+    protocol_initialize(myAddress);
  
     // Initialize Radio driver
 
@@ -428,8 +361,8 @@ int main( void )
     // verify the connection with the board
     while( Radio.Read( REG_VERSION ) == 0x00  )
     {
-        sx1272_debug_if( DEBUG_MESSAGE, "Radio could not be detected!\n", NULL );
-        wait( 1 );
+        sx1272_debug_if( DEBUG_MESSAGE, "Radio could not be detected!\n");
+        return -1;
     }
  
     sx1272_debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1272MB2XAS ) ), " > Board Type: SX1272MB2xAS <\n" );
