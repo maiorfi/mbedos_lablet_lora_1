@@ -28,12 +28,12 @@
 
 // Communication parameters 
 #define RX_TIMEOUT_VALUE                                2000      // in ms
-#define TX_TIMEOUT_VALUE                                2000      // in ms
+#define TX_TIMEOUT_VALUE                                1000      // in ms
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
 #define REQUEST_REPLY_DELAY                             250       // in ms
 
-#define STATE_MACHINE_STALE_STATE_TIMEOUT               5000      // in ms
+#define STATE_MACHINE_STALE_STATE_TIMEOUT               (RX_TIMEOUT_VALUE+1000)      // in ms
 
 #define EVENT_PROC_COMMUNICATION_CYCLE_INTERVAL         100       // in ms
 
@@ -104,8 +104,6 @@ void event_proc_communication_cycle()
     uint16_t bufferSize=BUFFER_SIZE;
     uint8_t buffer[BUFFER_SIZE];
 
-    uint16_t payloadLen;
-
     if(previousState!=State)
     {
         stateChangeTimeStamp=s_state_timer.read_ms();
@@ -140,7 +138,7 @@ void event_proc_communication_cycle()
             break;
 
         case RX_WAITING_FOR_REPLY:
-            sx1272_debug_if( DEBUG_MESSAGE, "...(waiting for reply)...\n" );
+            //sx1272_debug_if( DEBUG_MESSAGE, "...(waiting for reply)...\n" );
             break;
 
         case RX_DONE_RECEIVED_REQUEST:
@@ -166,13 +164,6 @@ void event_proc_communication_cycle()
 
             // Send the next REPLY frame
             sprintf((char*)buffer, "%s%u|%u|%u",(const char*)ReplyMsg, LatestReceivedRequestCounter, MyAddress, LatestReceivedRequestSourceAddress);
-            
-            payloadLen=strlen((const char*)buffer) + 1;
-
-            if(payloadLen<bufferSize)
-            {
-                memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-            }
 
             Radio.Send( buffer, bufferSize );
 
@@ -251,13 +242,6 @@ void event_proc_send_data()
 
     // Send the next REQUEST frame
     sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress);
-    
-    uint16_t payloadLen=strlen((const char*)buffer)+1;
-
-    if(payloadLen<bufferSize)
-    {
-        memset(buffer+payloadLen,0xFF,bufferSize-payloadLen);
-    }
 
     Radio.Send( buffer, bufferSize );
 
