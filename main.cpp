@@ -52,7 +52,7 @@ typedef enum
 {
     INITIAL,
 
-    IDLE_RX_WAITING_FOR_REQUEST,
+    RX_WAITING_FOR_REQUEST,
     RX_WAITING_FOR_REPLY,
 
     RX_DONE_RECEIVED_REQUEST,
@@ -67,8 +67,6 @@ typedef enum
 } AppStates_t;
  
 static AppStates_t State = INITIAL;
-
-Ticker s_ticker;
 
 static DigitalIn address_in_bit_0(PH_0, PullUp);
 static DigitalIn address_in_bit_1(PH_1, PullUp);
@@ -86,12 +84,12 @@ static SX1272MB2xAS Radio( NULL );
 static Thread s_thread_manage_communication;
 static EventQueue s_eq_manage_communication;
 
+static Timer s_state_timer;
+
 void event_proc_communication_cycle()
 {
     static AppStates_t previousState=INITIAL;
-    static Timer s_state_timer;
-    static int stateChangeTimeStamp;
-
+    
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
@@ -99,18 +97,23 @@ void event_proc_communication_cycle()
 
     if(previousState!=State)
     {
-        stateChangeTimeStamp=s_state_timer.read_ms();
-        previousState=State;
+        s_state_timer.reset();
     }
     else
     {
-        if(s_state_timer.read_ms()-stateChangeTimeStamp > STATE_MACHINE_STALE_STATE_TIMEOUT)
+        int elapsed_ms=s_state_timer.read_ms();
+
+        if(elapsed_ms > STATE_MACHINE_STALE_STATE_TIMEOUT)
         {
             sx1272_debug_if( DEBUG_MESSAGE, "...(state-machine timeout, resetting to initial state)...\n" );
 
             State=INITIAL;
+            
+            s_state_timer.reset();
         }
     }
+
+    previousState=State;
 
     switch( State )
     {
@@ -122,13 +125,13 @@ void event_proc_communication_cycle()
 
             protocol_reset();
             
-            State = IDLE_RX_WAITING_FOR_REQUEST;
+            State = RX_WAITING_FOR_REQUEST;
             
             Radio.Rx(RX_TIMEOUT_VALUE);
 
             break;
 
-        case IDLE_RX_WAITING_FOR_REQUEST:
+        case RX_WAITING_FOR_REQUEST:
             //sx1272_debug_if( DEBUG_MESSAGE, "...(waiting for request)...\n" );
             break;
 
@@ -256,7 +259,7 @@ void event_proc_send_data()
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    if(State!=IDLE_RX_WAITING_FOR_REQUEST) return;
+    if(State!=RX_WAITING_FOR_REQUEST) return;
 
     // Send the REQUEST frame
     protocol_fill_create_request_buffer(buffer, bufferSize);
@@ -303,7 +306,7 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
     
     protocol_process_received_data(payload, size);
 
-    if(State==IDLE_RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
+    if(State==RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
     {
         sx1272_debug_if( DEBUG_MESSAGE, "...request rx done...\n" );
 
@@ -325,9 +328,10 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
 
         protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
         
-        sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", dumpBuffer);
-        
-        State = INITIAL;
+        sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), ignoring...\n", dumpBuffer);
+
+        Radio.Sleep();
+        Radio.Rx(RX_TIMEOUT_VALUE);
     }
 }
  
@@ -337,7 +341,7 @@ void OnTxTimeout( void )
 
     Radio.Sleep();
 
-    State=IDLE_RX_WAITING_FOR_REQUEST;
+    State=RX_WAITING_FOR_REQUEST;
     
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
@@ -346,13 +350,18 @@ void OnRxTimeout( void )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n" );
 
-    if(State!=IDLE_RX_WAITING_FOR_REQUEST && State!=RX_WAITING_FOR_REPLY) return;
+    if(State!=RX_WAITING_FOR_REQUEST && State!=RX_WAITING_FOR_REPLY) return;
 
-    sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: resetting state to idle...\n" );
+    sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: restart waiting for incoming request...\n" );
 
     Radio.Sleep();
 
-    State = IDLE_RX_WAITING_FOR_REQUEST;
+    State = RX_WAITING_FOR_REQUEST;
+
+    // Il reset del timer per la gestione del timeout di cambio stato viene resettato qui
+    // anziché nella macchina a stati per tornare il prima possibile nello stato di waiting-request
+    // senza transitare per lo stato iniziale
+    s_state_timer.reset();
     
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
@@ -424,6 +433,8 @@ int main( void )
     s_eq_manage_communication.call_every(EVENT_PROC_COMMUNICATION_CYCLE_INTERVAL, event_proc_communication_cycle);
 
     btn.fall(&btn_interrupt_handler);
+
+    s_state_timer.start();
 
     s_thread_manage_communication.start(callback(&s_eq_manage_communication, &EventQueue::dispatch_forever));
 }
