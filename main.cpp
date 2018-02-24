@@ -33,6 +33,8 @@
 
 #define REQUEST_REPLY_DELAY                             250       // in ms
 
+#define STATE_MACHINE_STALE_STATE_TIMEOUT               5000      // in ms
+
  
 static InterruptIn btn(BUTTON1);
  
@@ -87,19 +89,41 @@ static uint8_t RxBuffer[BUFFER_SIZE];
 
 static Thread s_thread_manage_communication;
 static EventQueue s_eq_manage_communication;
-static Mutex s_state_mutex;
+//static Mutex s_state_mutex;
 
 void event_proc_communication_cycle()
 {
     AppStates_t currentState;
+
+    static Timer s_state_timer;
+    static AppStates_t previousState=INITIAL;
+    static int stateChangeTimeStamp;
+
     uint16_t bufferSize=BUFFER_SIZE;
     uint8_t buffer[BUFFER_SIZE];
 
     uint16_t payloadLen;
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
     currentState = State;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
+
+    if(previousState!=currentState)
+    {
+        stateChangeTimeStamp=s_state_timer.read_ms();
+        previousState=currentState;
+    }
+    else
+    {
+        if(s_state_timer.read_ms()-stateChangeTimeStamp > STATE_MACHINE_STALE_STATE_TIMEOUT)
+        {
+            sx1272_debug_if( DEBUG_MESSAGE, "...(state-machine timeout, resetting to initial state)...\n" );
+
+            //s_state_mutex.lock();
+            currentState=State=INITIAL;
+            //s_state_mutex.unlock();
+        }
+    }
 
     switch( currentState )
     {
@@ -107,9 +131,11 @@ void event_proc_communication_cycle()
 
             Radio.Sleep();
 
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
+            memset(RxBuffer,0x00,BUFFER_SIZE);
+            RxBufferSize=0;
             State = IDLE_RX_WAITING_FOR_REQUEST;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             Radio.Rx(RX_TIMEOUT_VALUE);
 
@@ -128,29 +154,29 @@ void event_proc_communication_cycle()
             uint8_t latestReceivedRequestDestinationAddress, latestReceivedRequestSourceAddress;
             uint16_t latestReceivedRequestCounter;
             
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
             sx1272_debug_if( DEBUG_MESSAGE, "*** REQUEST RECEIVED ('%s') ***\n", RxBuffer);
             latestReceivedRequestDestinationAddress=LatestReceivedRequestDestinationAddress;
             latestReceivedRequestSourceAddress=LatestReceivedRequestSourceAddress;
             latestReceivedRequestCounter=LatestReceivedRequestCounter;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             if(latestReceivedRequestDestinationAddress!=MyAddress)
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me...\n");
 
-                s_state_mutex.lock();
+                //s_state_mutex.lock();
                 State = INITIAL;
-                s_state_mutex.unlock();
+                //s_state_mutex.unlock();
                 
                 break;
             }
 
             sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST IS FOR ME...\n");
 
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
             State = TX_WAITING_FOR_REPLY_SENT;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             // Attesa di durata sufficiente per permettere a chi ha inviato la request di mettersi
             // in ascolto della reply
@@ -175,13 +201,13 @@ void event_proc_communication_cycle()
             uint8_t latestReceivedReplyDestinationAddress, latestReceivedReplySourceAddress;
             uint16_t latestReceivedReplyCounter, counter;
             
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
             sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ('%s') ***\n", RxBuffer);
             latestReceivedReplyDestinationAddress=LatestReceivedReplyDestinationAddress;
             latestReceivedReplySourceAddress=LatestReceivedReplySourceAddress;
             latestReceivedReplyCounter=LatestReceivedReplyCounter;
             counter=Counter;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             if(latestReceivedReplyDestinationAddress!=MyAddress)
             {
@@ -201,9 +227,9 @@ void event_proc_communication_cycle()
                 }
             }
 
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
             State = INITIAL;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             break;
 
@@ -213,9 +239,9 @@ void event_proc_communication_cycle()
 
             Radio.Sleep();
            
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
             State = RX_WAITING_FOR_REPLY;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             Radio.Rx(RX_TIMEOUT_VALUE);
 
@@ -225,9 +251,9 @@ void event_proc_communication_cycle()
 
             sx1272_debug_if( DEBUG_MESSAGE, "...REPLY SENT\n" ); 
            
-            s_state_mutex.lock();
+            //s_state_mutex.lock();
             State = INITIAL;
-            s_state_mutex.unlock();
+            //s_state_mutex.unlock();
 
             break;
 
@@ -258,11 +284,11 @@ void event_proc_send_data()
     uint16_t counter;
     uint8_t destinationAddress;
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
     currentState=State;
     destinationAddress=DestinationAddress;
     counter=++Counter;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 
     if(currentState!=IDLE_RX_WAITING_FOR_REQUEST) return;
 
@@ -280,12 +306,12 @@ void event_proc_send_data()
 
     Radio.Send( buffer, bufferSize );
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
     DestinationAddress++;
     if(DestinationAddress==MyAddress) DestinationAddress++;
     if(DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
     State=TX_WAITING_FOR_REQUEST_SENT;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 }
 
 void btn_interrupt_handler()
@@ -297,7 +323,7 @@ void OnTxDone( void )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnTxDone\n" );
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
 
     if(State==TX_WAITING_FOR_REQUEST_SENT)
     {
@@ -312,14 +338,14 @@ void OnTxDone( void )
         State = TX_DONE_SENT_REPLY;
     }
 
-    s_state_mutex.unlock();    
+    //s_state_mutex.unlock();    
 }
  
 void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnRxDone (RSSI:%d, SNR:%d): %s (len: %d) \n", rssi, snr, (const char*)payload, size);
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
 
     RxBufferSize = size;
 
@@ -409,7 +435,7 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
         }
     }
 
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 }
  
 void OnTxTimeout( void )
@@ -418,9 +444,9 @@ void OnTxTimeout( void )
 
     Radio.Sleep();
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
     State=IDLE_RX_WAITING_FOR_REQUEST;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
@@ -431,19 +457,17 @@ void OnRxTimeout( void )
 
     AppStates_t currentState;
 
-    s_state_mutex.lock();
+    //s_state_mutex.lock();
     currentState=State;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 
     if(currentState!=IDLE_RX_WAITING_FOR_REQUEST && currentState!=RX_WAITING_FOR_REPLY) return;
 
     sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: resetting state to idle...\n" );
 
-    s_state_mutex.lock();
-    memset(RxBuffer,0x00,BUFFER_SIZE);
-    RxBufferSize=0;
+    //s_state_mutex.lock();
     State = IDLE_RX_WAITING_FOR_REQUEST;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 
     Radio.Sleep();
     Radio.Rx(RX_TIMEOUT_VALUE);
@@ -453,11 +477,9 @@ void OnRxError( void )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnRxError\n" );
 
-    s_state_mutex.lock();
-    memset(RxBuffer,0x00,BUFFER_SIZE);
-    RxBufferSize=0;
+    //s_state_mutex.lock();
     State = INITIAL;;
-    s_state_mutex.unlock();
+    //s_state_mutex.unlock();
 
     sx1272_debug_if( DEBUG_MESSAGE, "...rx error: resetting state to idle...\n" );
 }
@@ -474,11 +496,15 @@ int main( void )
  
     // Initialize Radio driver
 
+    Radio.assign_events_queue_thread(&s_thread_manage_communication);
+    Radio.assign_events_queue(&s_eq_manage_communication);
+
     RadioEvents.TxDone = OnTxDone;
     RadioEvents.RxDone = OnRxDone;
     RadioEvents.RxError = OnRxError;
     RadioEvents.TxTimeout = OnTxTimeout;
     RadioEvents.RxTimeout = OnRxTimeout;
+
     Radio.Init( &RadioEvents );
  
     // verify the connection with the board
