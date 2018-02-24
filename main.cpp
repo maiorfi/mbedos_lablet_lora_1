@@ -36,7 +36,7 @@
 #define TX_TIMEOUT_VALUE                                1000      // in ms
 #define RADIO_MESSAGES_BUFFER_SIZE                      32        // Define the payload size here
 
-#define REQUEST_REPLY_DELAY                             50       // in ms
+#define REQUEST_REPLY_DELAY                             150       // in ms
 
 #define STATE_MACHINE_STALE_STATE_TIMEOUT               (RX_TIMEOUT_VALUE+1000)      // in ms
 
