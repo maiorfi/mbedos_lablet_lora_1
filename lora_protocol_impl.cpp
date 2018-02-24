@@ -35,6 +35,11 @@ void protocol_reset()
 
 bool protocol_is_latest_received_request_for_me()
 {
+    return LatestReceivedRequestDestinationAddress==MyAddress || LatestReceivedRequestDestinationAddress==0;
+}
+
+bool protocol_should_i_reply_to_latest_received_request()
+{
     return LatestReceivedRequestDestinationAddress==MyAddress;
 }
 

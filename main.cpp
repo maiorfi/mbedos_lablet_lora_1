@@ -135,7 +135,7 @@ void event_proc_communication_cycle()
             
             if(!protocol_is_latest_received_request_for_me())
             {
-                sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me...\n");
+                sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me\n");
 
                 State = INITIAL;
                 
@@ -143,6 +143,17 @@ void event_proc_communication_cycle()
             }
 
             sx1272_debug_if( DEBUG_MESSAGE, "...REQUEST IS FOR ME...\n");
+
+            if(!protocol_should_i_reply_to_latest_received_request())
+            {
+                sx1272_debug_if( DEBUG_MESSAGE, "...but I should not reply\n");
+
+                State = INITIAL;
+                
+                break;
+            }
+
+            sx1272_debug_if( DEBUG_MESSAGE, "...AND I SHOULD REPLY...\n");
 
             State = TX_WAITING_FOR_REPLY_SENT;
             
@@ -163,7 +174,7 @@ void event_proc_communication_cycle()
             
             if(!protocol_is_latest_received_reply_for_me())
             {
-                sx1272_debug_if( DEBUG_MESSAGE, "...reply is not for me...\n");
+                sx1272_debug_if( DEBUG_MESSAGE, "...reply is not for me\n");
             }
             else
             {
