@@ -92,6 +92,8 @@ void event_proc_communication_cycle()
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
+    char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
+
     if(previousState!=State)
     {
         stateChangeTimeStamp=s_state_timer.read_ms();
@@ -131,7 +133,9 @@ void event_proc_communication_cycle()
 
         case RX_DONE_RECEIVED_REQUEST:
 
-            sx1272_debug_if( DEBUG_MESSAGE, "*** REQUEST RECEIVED ('%s') ***\n", RxBuffer);
+            protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
+
+            sx1272_debug_if( DEBUG_MESSAGE, "*** REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
             
             if(!protocol_is_latest_received_request_for_me())
             {
@@ -169,8 +173,10 @@ void event_proc_communication_cycle()
             break;
 
         case RX_DONE_RECEIVED_REPLY:
-            
-            sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ('%s') ***\n", RxBuffer);
+
+            protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
+
+            sx1272_debug_if( DEBUG_MESSAGE, "*** REPLY RECEIVED ('%s') ***\n", dumpBuffer);
             
             if(!protocol_is_latest_received_reply_for_me())
             {
@@ -239,12 +245,11 @@ void event_proc_send_data()
     // Send the REQUEST frame
     protocol_fill_create_request_buffer(buffer, bufferSize);
 
-    size_t dumpBufferSize=bufferSize;
     char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    protocol_fill_request_dump_as_string_buffer(dumpBuffer, buffer, dumpBufferSize);
+    protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : ('%s') ***\n", dumpBuffer);
+    sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : '%s' ***\n", dumpBuffer);
 
     State=TX_WAITING_FOR_REQUEST_SENT;
 
@@ -300,8 +305,11 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
     }
     else // ricezione valida, ma arrivata in uno stato non previsto
     {   
-        // TODO : la diagnostica qui richiede di condividere stato interno del protocollo...HACK!
-        sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", (const char*)RxBuffer);
+        char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
+
+        protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
+        
+        sx1272_debug_if( DEBUG_MESSAGE, "...valid but unexpected rx done ('%s'), resetting to idle state...\n", dumpBuffer);
         
         State = INITIAL;
     }

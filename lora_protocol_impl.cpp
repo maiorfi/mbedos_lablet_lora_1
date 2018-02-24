@@ -7,8 +7,9 @@
 
 #define PROTOCOL_BUFFER_SIZE 32
 
-uint16_t RxBufferSize = PROTOCOL_BUFFER_SIZE;
-uint8_t RxBuffer[PROTOCOL_BUFFER_SIZE];
+static uint16_t RxBufferSize = PROTOCOL_BUFFER_SIZE;
+static uint8_t RxBuffer[PROTOCOL_BUFFER_SIZE];
+
 uint8_t DestinationAddress=0;
 
 uint16_t Counter=0, LatestReceivedRequestCounter=0, LatestReceivedReplyCounter=0;
@@ -154,7 +155,12 @@ void protocol_process_received_data_as_reply()
     }
 }
 
-void protocol_fill_request_dump_as_string_buffer(char* destBuffer, uint8_t* srcBuffer, size_t bufferSize)
+void protocol_fill_with_rx_buffer_dump(char* destBuffer, size_t destBufferSize)
 {
-    strcpy(destBuffer,(const char*)srcBuffer);
+    strcpy(destBuffer,(const char*)RxBuffer);
+}
+
+void protocol_fill_with_tx_buffer_dump(char* destBuffer, uint8_t* txBuffer, size_t destBufferSize)
+{
+    strcpy(destBuffer,(const char*)txBuffer);
 }
