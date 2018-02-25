@@ -162,10 +162,18 @@ void protocol_process_received_data_as_reply()
 
 void protocol_fill_with_rx_buffer_dump(char* destBuffer, size_t destBufferSize)
 {
-    strcpy(destBuffer,(const char*)RxBuffer);
+    char srcBuffer[PROTOCOL_BUFFER_SIZE];
+    memcpy(srcBuffer,RxBuffer,PROTOCOL_BUFFER_SIZE);
+    srcBuffer[PROTOCOL_BUFFER_SIZE-1]='\0';
+
+    strcpy(destBuffer,srcBuffer);
 }
 
 void protocol_fill_with_tx_buffer_dump(char* destBuffer, uint8_t* txBuffer, size_t destBufferSize)
 {
-    strcpy(destBuffer,(const char*)txBuffer);
+    char srcBuffer[PROTOCOL_BUFFER_SIZE];
+    memcpy(srcBuffer,txBuffer,PROTOCOL_BUFFER_SIZE);
+    srcBuffer[PROTOCOL_BUFFER_SIZE-1]='\0';
+
+    strcpy(destBuffer,srcBuffer);
 }
