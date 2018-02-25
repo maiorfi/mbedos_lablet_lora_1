@@ -32,13 +32,13 @@
 #define LORA_CRC_ENABLED                            true
 
 // Communication parameters 
-#define RX_TIMEOUT_VALUE                                2000      // in ms
-#define TX_TIMEOUT_VALUE                                1000      // in ms
+#define RX_TIMEOUT_VALUE                                1000      // in ms
+#define TX_TIMEOUT_VALUE                                500      // in ms
 #define RADIO_MESSAGES_BUFFER_SIZE                      32        // Define the payload size here
 
 #define REQUEST_REPLY_DELAY                             150       // in ms
 
-#define STATE_MACHINE_STALE_STATE_TIMEOUT               (RX_TIMEOUT_VALUE+1000)      // in ms
+#define STATE_MACHINE_STALE_STATE_TIMEOUT               (RX_TIMEOUT_VALUE+500)      // in ms
 
 #define EVENT_PROC_COMMUNICATION_CYCLE_INTERVAL         100       // in ms
 
@@ -86,36 +86,26 @@ static EventQueue s_eq_manage_communication;
 
 static Timer s_state_timer;
 
+inline AppStates_t getState() { return State;}
+AppStates_t setState(AppStates_t newState) { AppStates_t previousState=State; State=newState; s_state_timer.reset(); return previousState;}
+
 void event_proc_communication_cycle()
 {
-    static AppStates_t previousState=INITIAL;
-    
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
     char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    if(previousState!=State)
-    {
-        s_state_timer.reset();
-    }
-    else
-    {
-        int elapsed_ms=s_state_timer.read_ms();
+    int elapsed_ms=s_state_timer.read_ms();
 
-        if(elapsed_ms > STATE_MACHINE_STALE_STATE_TIMEOUT)
-        {
-            sx1272_debug_if( DEBUG_MESSAGE, "...(state-machine timeout, resetting to initial state)...\n" );
+    if(elapsed_ms > STATE_MACHINE_STALE_STATE_TIMEOUT)
+    {
+        sx1272_debug_if( DEBUG_MESSAGE, "...(state-machine timeout, resetting to initial state)...\n" );
 
-            State=INITIAL;
-            
-            s_state_timer.reset();
-        }
+        setState(INITIAL);
     }
 
-    previousState=State;
-
-    switch( State )
+    switch( getState() )
     {
         case INITIAL:
 
@@ -125,7 +115,7 @@ void event_proc_communication_cycle()
 
             protocol_reset();
             
-            State = RX_WAITING_FOR_REQUEST;
+            setState(RX_WAITING_FOR_REQUEST);
             
             Radio.Rx(RX_TIMEOUT_VALUE);
 
@@ -149,7 +139,7 @@ void event_proc_communication_cycle()
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...request is not for me\n");
 
-                State = INITIAL;
+                setState(INITIAL);
                 
                 break;
             }
@@ -160,14 +150,14 @@ void event_proc_communication_cycle()
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...but I should not reply\n");
 
-                State = INITIAL;
+                setState(INITIAL);
                 
                 break;
             }
 
             sx1272_debug_if( DEBUG_MESSAGE, "...AND I SHOULD REPLY...\n");
 
-            State = TX_WAITING_FOR_REPLY_SENT;
+            setState(TX_WAITING_FOR_REPLY_SENT);
             
             // Attesa di durata sufficiente per permettere a chi ha inviato la request di mettersi
             // in ascolto della reply
@@ -200,12 +190,11 @@ void event_proc_communication_cycle()
                 }
                 else
                 {
-                    // TODO : la diagnostica qui richiede di condividere stato interno del protocollo...HACK!
-                    sx1272_debug_if( DEBUG_MESSAGE, "...BUT REPLY IS WRONG (REQUEST: %u, REPLY: %u)\n", Counter, LatestReceivedReplyCounter);
+                    sx1272_debug_if( DEBUG_MESSAGE, "...BUT REPLY IS WRONG (reply doesn't mach request)\n");
                 }
             }
 
-            State = INITIAL;
+            setState(INITIAL);
             
             break;
 
@@ -219,14 +208,14 @@ void event_proc_communication_cycle()
             {
                 sx1272_debug_if( DEBUG_MESSAGE, "...but I should not wait for reply\n" );
 
-                State = INITIAL;
+                setState(INITIAL);
 
                 break;
             }
 
             sx1272_debug_if( DEBUG_MESSAGE, "...waiting for reply...\n" );
             
-            State = RX_WAITING_FOR_REPLY;
+            setState(RX_WAITING_FOR_REPLY);
 
             Radio.Rx(RX_TIMEOUT_VALUE);
 
@@ -236,7 +225,7 @@ void event_proc_communication_cycle()
 
             sx1272_debug_if( DEBUG_MESSAGE, "...REPLY SENT\n" ); 
            
-            State = INITIAL;
+            setState(INITIAL);
             
             break;
 
@@ -259,7 +248,7 @@ void event_proc_send_data()
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    if(State!=RX_WAITING_FOR_REQUEST) return;
+    if(getState() != RX_WAITING_FOR_REQUEST) return;
 
     // Send the REQUEST frame
     protocol_fill_create_request_buffer(buffer, bufferSize);
@@ -270,7 +259,7 @@ void event_proc_send_data()
 
     sx1272_debug_if( DEBUG_MESSAGE, "\n*** SENDING NEW REQUEST : '%s' ***\n", dumpBuffer);
 
-    State=TX_WAITING_FOR_REQUEST_SENT;
+    setState(TX_WAITING_FOR_REQUEST_SENT);
 
     Radio.Send( buffer, bufferSize );
 }
@@ -284,17 +273,17 @@ void OnTxDone( void )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnTxDone\n" );
 
-    if(State==TX_WAITING_FOR_REQUEST_SENT)
+    if(getState() == TX_WAITING_FOR_REQUEST_SENT)
     {
         sx1272_debug_if( DEBUG_MESSAGE, "...request tx done...\n" );
 
-        State = TX_DONE_SENT_REQUEST;
+        setState(TX_DONE_SENT_REQUEST);
     }
-    else if (TX_WAITING_FOR_REPLY_SENT)
+    else if (getState() == TX_WAITING_FOR_REPLY_SENT)
     {
         sx1272_debug_if( DEBUG_MESSAGE, "...reply tx done...\n" );
 
-        State = TX_DONE_SENT_REPLY;
+        setState(TX_DONE_SENT_REPLY);
     }
 }
  
@@ -306,21 +295,21 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
     
     protocol_process_received_data(payload, size);
 
-    if(State==RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
+    if(getState() == RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
     {
         sx1272_debug_if( DEBUG_MESSAGE, "...request rx done...\n" );
 
         protocol_process_received_data_as_request();
 
-        State = RX_DONE_RECEIVED_REQUEST;
+        setState(RX_DONE_RECEIVED_REQUEST);
     }
-    else if(State==RX_WAITING_FOR_REPLY && protocol_is_received_data_a_reply())
+    else if(getState() == RX_WAITING_FOR_REPLY && protocol_is_received_data_a_reply())
     { 
         sx1272_debug_if( DEBUG_MESSAGE, "...reply rx done...\n" );
 
         protocol_process_received_data_as_reply();
 
-        State = RX_DONE_RECEIVED_REPLY;
+        setState(RX_DONE_RECEIVED_REPLY);
     }
     else // ricezione valida, ma arrivata in uno stato non previsto
     {   
@@ -341,7 +330,7 @@ void OnTxTimeout( void )
 
     Radio.Sleep();
 
-    State=RX_WAITING_FOR_REQUEST;
+    setState(RX_WAITING_FOR_REQUEST);
     
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
@@ -350,18 +339,13 @@ void OnRxTimeout( void )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n" );
 
-    if(State!=RX_WAITING_FOR_REQUEST && State!=RX_WAITING_FOR_REPLY) return;
+    if(getState() != RX_WAITING_FOR_REQUEST && getState() != RX_WAITING_FOR_REPLY) return;
 
     sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: restart waiting for incoming request...\n" );
 
     Radio.Sleep();
 
-    State = RX_WAITING_FOR_REQUEST;
-
-    // Il reset del timer per la gestione del timeout di cambio stato viene resettato qui
-    // anziché nella macchina a stati per tornare il prima possibile nello stato di waiting-request
-    // senza transitare per lo stato iniziale
-    s_state_timer.reset();
+    setState(RX_WAITING_FOR_REQUEST);
     
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
@@ -370,7 +354,7 @@ void OnRxError( void )
 {
     sx1272_debug_if( DEBUG_MESSAGE, "> OnRxError\n" );
 
-    State = INITIAL;;
+    setState(INITIAL);;
     
     sx1272_debug_if( DEBUG_MESSAGE, "...rx error: resetting state to idle...\n" );
 }

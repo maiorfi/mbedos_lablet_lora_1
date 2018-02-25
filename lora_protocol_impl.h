@@ -1,12 +1,3 @@
-extern uint16_t Counter;
-extern uint16_t LatestReceivedRequestCounter;
-extern uint16_t LatestReceivedReplyCounter;
-
-extern uint8_t LatestReceivedRequestDestinationAddress;
-extern uint8_t LatestReceivedRequestSourceAddress;
-extern uint8_t LatestReceivedReplyDestinationAddress;
-extern uint8_t LatestReceivedReplySourceAddress;
-
 void protocol_initialize(uint8_t myAddress);
 void protocol_reset();
 

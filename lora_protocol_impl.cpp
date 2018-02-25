@@ -10,16 +10,16 @@
 static uint16_t RxBufferSize = PROTOCOL_BUFFER_SIZE;
 static uint8_t RxBuffer[PROTOCOL_BUFFER_SIZE];
 
-uint8_t DestinationAddress=0;
+static uint8_t DestinationAddress=0;
 
-uint16_t Counter=0, LatestReceivedRequestCounter=0, LatestReceivedReplyCounter=0;
-uint8_t LatestReceivedRequestDestinationAddress=0, LatestReceivedRequestSourceAddress=0;
-uint8_t LatestReceivedReplyDestinationAddress=0, LatestReceivedReplySourceAddress=0;
+static uint16_t Counter=0, LatestReceivedRequestCounter=0, LatestReceivedReplyCounter=0;
+static uint8_t LatestReceivedRequestDestinationAddress=0, LatestReceivedRequestSourceAddress=0;
+static uint8_t LatestReceivedReplyDestinationAddress=0, LatestReceivedReplySourceAddress=0;
 
 static uint8_t MyAddress;
 
-const uint8_t RequestMsg[] = "REQUEST-";
-const uint8_t ReplyMsg[] = "REPLY-";
+static const uint8_t RequestMsg[] = "REQUEST-";
+static const uint8_t ReplyMsg[] = "REPLY-";
 
 #define MAX_DESTINATION_ADDRESS 4
 
