@@ -337,11 +337,13 @@ void OnTxTimeout( void )
  
 void OnRxTimeout( void )
 {
-    sx1272_debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n" );
+    // sx1272_debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n" );
 
     if(getState() != RX_WAITING_FOR_REQUEST && getState() != RX_WAITING_FOR_REPLY) return;
 
-    sx1272_debug_if( DEBUG_MESSAGE, "...rx timeout: restart waiting for incoming request...\n" );
+    // sx1272_debug_if( getState() == RX_WAITING_FOR_REQUEST, "...rx timeout while waiting for request: restarting for request...\n" );
+
+    sx1272_debug_if( getState() == RX_WAITING_FOR_REPLY, "...rx TIMEOUT while WAITING for REPLY: restarting waiting for request...\n" );
 
     Radio.Sleep();
 
