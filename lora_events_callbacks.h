@@ -1,5 +1,5 @@
-#ifndef __MAIN_H__
-#define __MAIN_H__
+#ifndef __LORA_EVENTS_CALLBACKS_H__
+#define __LORA_EVENTS_CALLBACKS_H__
  
 /*
  * Callback functions prototypes
@@ -39,4 +39,4 @@ void OnFhssChangeChannel( uint8_t channelIndex );
  */
 void OnCadDone( void );
  
-#endif // __MAIN_H__
+#endif // __LORA_EVENTS_CALLBACKS_H__
