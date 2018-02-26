@@ -12,6 +12,13 @@ static InterruptIn btn(BUTTON1);
 static Thread s_thread_manage_lora_communication;
 static EventQueue s_eq_manage_lora_communication;
 
+// Main
+static EventQueue s_eq_main;
+
+extern Mutex lora_cond_var_mutex;
+extern ConditionVariable lora_cond_var;
+extern RequestOutcomes_t lora_request_outcome;  
+
 // Variabili per demo
 static uint8_t s_lora_MyAddress;
 
@@ -19,6 +26,33 @@ static uint16_t s_lora_Counter=0;
 static uint8_t s_lora_DestinationAddress=0;
 
 #define MAX_DESTINATION_ADDRESS 4
+
+RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress)
+{
+    RequestOutcomes_t outcome=OUTCOME_UNDEFINED;
+
+    lora_cond_var_mutex.lock();
+
+    lora_request_outcome=OUTCOME_UNDEFINED;
+
+    printf("\n\n___________ BEGIN %d -> %d ___________\n",argCounter, argDestinationAddress);
+
+    lora_state_machine_send_request(argCounter, argDestinationAddress);
+
+    do
+    {
+        lora_cond_var.wait();
+
+    } while(lora_request_outcome == OUTCOME_UNDEFINED);
+
+    outcome=lora_request_outcome;
+
+    printf("___________    END %d    ___________\n", lora_request_outcome);
+
+    lora_cond_var_mutex.unlock();
+
+    return outcome;
+}
 
 void event_proc_send_data_through_lora()
 {
@@ -28,12 +62,12 @@ void event_proc_send_data_through_lora()
     if(s_lora_DestinationAddress==s_lora_MyAddress) s_lora_DestinationAddress++;
     if(s_lora_DestinationAddress>MAX_DESTINATION_ADDRESS) s_lora_DestinationAddress=0;
 
-    lora_state_machine_send_request(s_lora_Counter, s_lora_DestinationAddress);
+    int outcome = send_lora_request(s_lora_Counter, s_lora_DestinationAddress);
 }
 
 void btn_interrupt_handler()
 {
-    s_eq_manage_lora_communication.call(event_proc_send_data_through_lora);
+    s_eq_main.call(event_proc_send_data_through_lora);
 }
  
 int main( void ) 
@@ -60,4 +94,6 @@ int main( void )
     }
 
     s_thread_manage_lora_communication.start(callback(&s_eq_manage_lora_communication, &EventQueue::dispatch_forever));
+
+    s_eq_main.dispatch_forever();
 }
