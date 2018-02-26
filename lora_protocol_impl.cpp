@@ -57,6 +57,11 @@ bool protocol_is_latest_received_reply_right()
     return LatestReceivedReplyCounter==Counter;
 }
 
+uint16_t protocol_get_latest_received_reply_payload()
+{
+    return LatestReceivedReplyCounter;
+}
+
 void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize,
     uint16_t argCounter, uint8_t argDestinationAddress)
 {

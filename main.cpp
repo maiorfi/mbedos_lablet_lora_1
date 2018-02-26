@@ -15,10 +15,6 @@ static EventQueue s_eq_manage_lora_communication;
 // Main
 static EventQueue s_eq_main;
 
-extern Mutex lora_cond_var_mutex;
-extern ConditionVariable lora_cond_var;
-extern RequestOutcomes_t lora_request_outcome;  
-
 // Variabili per demo
 static uint8_t s_lora_MyAddress;
 
@@ -29,7 +25,7 @@ static uint8_t s_lora_DestinationAddress=0;
 
 #define SEND_LORA_REQUEST_TIMEOUT 3000 // in ms
 
-RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress)
+RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress, uint16_t* outPayload)
 {
     RequestOutcomes_t outcome=OUTCOME_UNDEFINED;
     Timer timer;
@@ -42,8 +38,6 @@ RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationA
     uint32_t timeLeft=SEND_LORA_REQUEST_TIMEOUT;
 
     lora_request_outcome=OUTCOME_UNDEFINED;
-
-    printf("\n\n___________ BEGIN %d -> %d ___________\n",argCounter, argDestinationAddress);
 
     lora_state_machine_send_request(argCounter, argDestinationAddress);
 
@@ -58,7 +52,7 @@ RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationA
 
     outcome=timedOut ? OUTCOME_TIMEOUT_GENERAL : lora_request_outcome;
 
-    printf("___________    END %d    ___________\n", outcome);
+    if(outcome==OUTCOME_REPLY_RIGHT) *outPayload = lora_request_payload;
 
     lora_cond_var_mutex.unlock();
 
@@ -73,7 +67,13 @@ void event_proc_send_data_through_lora()
     if(s_lora_DestinationAddress==s_lora_MyAddress) s_lora_DestinationAddress++;
     if(s_lora_DestinationAddress>MAX_DESTINATION_ADDRESS) s_lora_DestinationAddress=0;
 
-    int outcome = send_lora_request(s_lora_Counter, s_lora_DestinationAddress);
+    printf("\n\n___________ BEGIN %d -> %d ___________\n", s_lora_DestinationAddress, s_lora_DestinationAddress);
+
+    uint16_t outRequestPayload=0xFFFF;
+
+    int outcome = send_lora_request(s_lora_Counter, s_lora_DestinationAddress, &outRequestPayload);
+
+    printf("__________   END %d (0x%X)  __________\n", outcome, outRequestPayload);
 }
 
 void btn_interrupt_handler()

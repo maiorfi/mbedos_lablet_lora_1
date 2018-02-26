@@ -56,15 +56,17 @@ static Timer s_state_timer;
 
 Mutex lora_cond_var_mutex;
 ConditionVariable lora_cond_var(lora_cond_var_mutex);
-RequestOutcomes_t lora_request_outcome;  
+RequestOutcomes_t lora_request_outcome;
+uint16_t lora_request_payload;
 
 inline AppStates_t getState() { return State;}
 AppStates_t setState(AppStates_t newState) { AppStates_t previousState=State; State=newState; s_state_timer.reset(); return previousState;}
 
-inline void updateAndNotifyConditionOutcome(RequestOutcomes_t outcome)
+inline void updateAndNotifyConditionOutcome(RequestOutcomes_t outcome, uint16_t payload)
 {
     lora_cond_var_mutex.lock();
     lora_request_outcome=outcome;
+    lora_request_payload=payload;
     lora_cond_var.notify_all();
     lora_cond_var_mutex.unlock();
 }
@@ -171,7 +173,9 @@ void lora_event_proc_communication_cycle()
                 {
                     sx1272_debug_if( SX1272_DEBUG_ENABLED, "...AND REPLY IS RIGHT\n");
 
-                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_RIGHT);
+                    uint16_t payload = protocol_get_latest_received_reply_payload();
+
+                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_RIGHT, payload);
 
                     setState(INITIAL);
                 }
@@ -179,7 +183,7 @@ void lora_event_proc_communication_cycle()
                 {
                     sx1272_debug_if( SX1272_DEBUG_ENABLED, "...BUT REPLY IS WRONG (reply doesn't mach request)\n");
 
-                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_WRONG);
+                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_WRONG, 0);
 
                     setState(INITIAL);
                 }
@@ -197,7 +201,7 @@ void lora_event_proc_communication_cycle()
             {
                 sx1272_debug_if( SX1272_DEBUG_ENABLED, "...but I should not wait for reply\n" );
 
-                updateAndNotifyConditionOutcome(OUTCOME_REPLY_NOT_NEEDED);
+                updateAndNotifyConditionOutcome(OUTCOME_REPLY_NOT_NEEDED, 0);
 
                 setState(INITIAL);
 
@@ -316,11 +320,11 @@ void OnTxTimeout( void )
 
     if(getState() == TX_WAITING_FOR_REQUEST_SENT)
     {
-        updateAndNotifyConditionOutcome(OUTCOME_TIMEOUT_WAITING_FOR_REQUEST_SENT);
+        updateAndNotifyConditionOutcome(OUTCOME_TIMEOUT_WAITING_FOR_REQUEST_SENT, 0);
     }
     else if(getState() == TX_WAITING_FOR_REPLY_SENT)
     {
-        updateAndNotifyConditionOutcome(OUTCOME_TIMEOUT_WAITING_FOR_REPLY_SENT);
+        updateAndNotifyConditionOutcome(OUTCOME_TIMEOUT_WAITING_FOR_REPLY_SENT, 0);
     }
     
     setState(INITIAL);
@@ -340,7 +344,7 @@ void OnRxTimeout( void )
     {
         sx1272_debug_if(SX1272_DEBUG_ENABLED , "...rx TIMEOUT while WAITING for REPLY: restarting waiting for request...\n" );
 
-        updateAndNotifyConditionOutcome(OUTCOME_WAITING_FOR_REPLY_TIMEOUT);
+        updateAndNotifyConditionOutcome(OUTCOME_WAITING_FOR_REPLY_TIMEOUT, 0);
     }
 
     Radio.Sleep();
