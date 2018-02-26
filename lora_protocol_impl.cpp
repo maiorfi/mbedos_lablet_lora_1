@@ -21,8 +21,6 @@ static uint8_t MyAddress;
 static const uint8_t RequestMsg[] = "REQUEST-";
 static const uint8_t ReplyMsg[] = "REPLY-";
 
-#define MAX_DESTINATION_ADDRESS 4
-
 void protocol_initialize(uint8_t myAddress)
 {
     MyAddress=myAddress;
@@ -59,13 +57,11 @@ bool protocol_is_latest_received_reply_right()
     return LatestReceivedReplyCounter==Counter;
 }
 
-void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize)
+void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize,
+    uint16_t argCounter, uint8_t argDestinationAddress)
 {
-    ++Counter;
-
-    DestinationAddress++;
-    if(DestinationAddress==MyAddress) DestinationAddress++;
-    if(DestinationAddress>MAX_DESTINATION_ADDRESS) DestinationAddress=0;
+    Counter=argCounter;
+    DestinationAddress=argDestinationAddress;
 
     sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress);
 }

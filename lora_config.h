@@ -21,4 +21,3 @@
 // Communication parameters 
 #define RX_TIMEOUT_VALUE                                2000      // in ms
 #define TX_TIMEOUT_VALUE                                1000      // in ms
-#define RADIO_MESSAGES_BUFFER_SIZE                      32        // Define the payload size here

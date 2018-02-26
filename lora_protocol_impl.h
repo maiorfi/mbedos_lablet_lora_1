@@ -7,7 +7,7 @@ bool protocol_should_i_wait_for_reply_for_latest_sent_request();
 bool protocol_is_latest_received_reply_for_me();
 void protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize);
 bool protocol_is_latest_received_reply_right();
-void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize);
+void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter, uint8_t argDestinationAddress);
 void protocol_process_received_data(uint8_t *payload, uint16_t size);
 bool protocol_is_received_data_a_request();
 void protocol_process_received_data_as_request();

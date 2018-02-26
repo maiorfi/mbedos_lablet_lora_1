@@ -12,10 +12,23 @@ static InterruptIn btn(BUTTON1);
 static Thread s_thread_manage_lora_communication;
 static EventQueue s_eq_manage_lora_communication;
 
+// Variabili per demo
+static uint8_t s_lora_MyAddress;
+
+static uint16_t s_lora_Counter=0;
+static uint8_t s_lora_DestinationAddress=0;
+
+#define MAX_DESTINATION_ADDRESS 4
 
 void event_proc_send_data_through_lora()
 {
-    lora_state_machine_send_data();
+    s_lora_Counter++;
+    s_lora_DestinationAddress++;
+
+    if(s_lora_DestinationAddress==s_lora_MyAddress) s_lora_DestinationAddress++;
+    if(s_lora_DestinationAddress>MAX_DESTINATION_ADDRESS) s_lora_DestinationAddress=0;
+
+    lora_state_machine_send_request(s_lora_Counter, s_lora_DestinationAddress);
 }
 
 void btn_interrupt_handler()
@@ -27,19 +40,17 @@ int main( void )
 {
     printf("LoRa Request/Reply Demo Application (blue button to send a new LoRa request)\n");
 
-    uint8_t myAddress;
+    s_lora_MyAddress = 1 + (lora_address_in_bit_0.read() ? 0 : 1) +  (lora_address_in_bit_1.read() ? 0 : 2);
 
-    myAddress = 1 + (lora_address_in_bit_0.read() ? 0 : 1) +  (lora_address_in_bit_1.read() ? 0 : 2);
-
-    printf("\n\n--------------------------\n");
-    printf("|   MY LORA ADDRESS: %u   |\n", myAddress);
-    printf("--------------------------\n\n");
+    printf("\n\n ------------------------\n");
+    printf("|   MY LORA ADDRESS: %u   |\n", s_lora_MyAddress);
+    printf(" ------------------------\n\n");
     
     s_eq_manage_lora_communication.call_every(LORA_EVENT_PROC_COMMUNICATION_CYCLE_INTERVAL, lora_event_proc_communication_cycle);
 
     btn.fall(&btn_interrupt_handler);
 
-    int lora_init_ret_val=lora_state_machine_initialize(myAddress, &s_thread_manage_lora_communication, &s_eq_manage_lora_communication);
+    int lora_init_ret_val=lora_state_machine_initialize(s_lora_MyAddress, &s_thread_manage_lora_communication, &s_eq_manage_lora_communication);
 
     if(lora_init_ret_val!=0)
     {

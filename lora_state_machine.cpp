@@ -15,6 +15,8 @@
 #define REQUEST_REPLY_DELAY                             150       // in ms
 #define STATE_MACHINE_STALE_STATE_TIMEOUT               (RX_TIMEOUT_VALUE+500)      // in ms
 
+#define RADIO_MESSAGES_BUFFER_SIZE                      32
+
 /*
  *  Global variables declarations
  */
@@ -207,7 +209,7 @@ void lora_event_proc_communication_cycle()
     }
 }
 
-void lora_state_machine_send_data()
+void lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress)
 {
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
@@ -215,7 +217,7 @@ void lora_state_machine_send_data()
     if(getState() != RX_WAITING_FOR_REQUEST) return;
 
     // Send the REQUEST frame
-    protocol_fill_create_request_buffer(buffer, bufferSize);
+    protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress);
 
     char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
 
