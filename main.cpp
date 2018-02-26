@@ -27,11 +27,19 @@ static uint8_t s_lora_DestinationAddress=0;
 
 #define MAX_DESTINATION_ADDRESS 4
 
+#define SEND_LORA_REQUEST_TIMEOUT 3000 // in ms
+
 RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress)
 {
     RequestOutcomes_t outcome=OUTCOME_UNDEFINED;
+    Timer timer;
 
     lora_cond_var_mutex.lock();
+
+    timer.start();
+
+    bool timedOut=false;
+    uint32_t timeLeft=SEND_LORA_REQUEST_TIMEOUT;
 
     lora_request_outcome=OUTCOME_UNDEFINED;
 
@@ -41,13 +49,16 @@ RequestOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationA
 
     do
     {
-        lora_cond_var.wait();
+        timedOut = lora_cond_var.wait_for(timeLeft);
 
-    } while(lora_request_outcome == OUTCOME_UNDEFINED);
+        uint32_t elapsed = timer.read_ms();
+        timeLeft = elapsed > SEND_LORA_REQUEST_TIMEOUT ? 0 : SEND_LORA_REQUEST_TIMEOUT - elapsed;
 
-    outcome=lora_request_outcome;
+    } while(lora_request_outcome == OUTCOME_UNDEFINED && !timedOut);
 
-    printf("___________    END %d    ___________\n", lora_request_outcome);
+    outcome=timedOut ? OUTCOME_TIMEOUT_GENERAL : lora_request_outcome;
+
+    printf("___________    END %d    ___________\n", outcome);
 
     lora_cond_var_mutex.unlock();
 
