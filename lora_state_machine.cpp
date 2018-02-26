@@ -54,21 +54,36 @@ static SX1272MB2xAS Radio( NULL );
 
 static Timer s_state_timer;
 
-Mutex lora_cond_var_mutex;
-ConditionVariable lora_cond_var(lora_cond_var_mutex);
-RequestOutcomes_t lora_request_outcome;
-uint16_t lora_request_payload;
+Mutex lora_reply_cond_var_mutex;
+ConditionVariable lora_reply_cond_var(lora_reply_cond_var_mutex);
+ReplyOutcomes_t lora_reply_outcome;
+uint16_t lora_reply_payload;
+
+notify_request_payload_callback_t lora_state_machine_notify_request_payload_callback;
+notify_request_payload_and_get_reply_payload_callback_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback;
 
 inline AppStates_t getState() { return State;}
 AppStates_t setState(AppStates_t newState) { AppStates_t previousState=State; State=newState; s_state_timer.reset(); return previousState;}
 
-inline void updateAndNotifyConditionOutcome(RequestOutcomes_t outcome, uint16_t payload)
+inline void updateAndNotifyConditionOutcome(ReplyOutcomes_t outcome, uint16_t payload)
 {
-    lora_cond_var_mutex.lock();
-    lora_request_outcome=outcome;
-    lora_request_payload=payload;
-    lora_cond_var.notify_all();
-    lora_cond_var_mutex.unlock();
+    lora_reply_cond_var_mutex.lock();
+    lora_reply_outcome=outcome;
+    lora_reply_payload=payload;
+    lora_reply_cond_var.notify_all();
+    lora_reply_cond_var_mutex.unlock();
+}
+
+void notify_request_payload(uint16_t requestPayload)
+{
+    if(lora_state_machine_notify_request_payload_callback) lora_state_machine_notify_request_payload_callback(requestPayload);
+}
+
+uint16_t notify_request_payload_and_get_reply_payload(uint16_t requestPayload)
+{
+    if(lora_state_machine_notify_request_payload_and_get_reply_payload_callback) return lora_state_machine_notify_request_payload_and_get_reply_payload_callback(requestPayload);
+    
+    return 0;
 }
 
 void lora_event_proc_communication_cycle()
@@ -86,6 +101,9 @@ void lora_event_proc_communication_cycle()
 
         setState(INITIAL);
     }
+
+    uint16_t requestPayload;
+    uint16_t replyPayload;
 
     switch( getState() )
     {
@@ -128,9 +146,13 @@ void lora_event_proc_communication_cycle()
 
             sx1272_debug_if( SX1272_DEBUG_ENABLED, "...REQUEST IS FOR ME...\n");
 
+            requestPayload = protocol_get_latest_received_request_payload();
+
             if(!protocol_should_i_reply_to_latest_received_request())
             {
                 sx1272_debug_if( SX1272_DEBUG_ENABLED, "...but I should not reply\n");
+
+                notify_request_payload(requestPayload);
 
                 setState(INITIAL);
                 
@@ -139,6 +161,8 @@ void lora_event_proc_communication_cycle()
 
             sx1272_debug_if( SX1272_DEBUG_ENABLED, "...AND I SHOULD REPLY...\n");
 
+            replyPayload = notify_request_payload_and_get_reply_payload(requestPayload);
+
             setState(TX_WAITING_FOR_REPLY_SENT);
             
             // Attesa di durata sufficiente per permettere a chi ha inviato la request di mettersi
@@ -146,7 +170,7 @@ void lora_event_proc_communication_cycle()
             wait_ms(REQUEST_REPLY_DELAY);
 
             // Send the REPLY frame
-            protocol_fill_create_reply_buffer(buffer, bufferSize);
+            protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload);
 
             Radio.Send( buffer, bufferSize );
 
@@ -173,15 +197,15 @@ void lora_event_proc_communication_cycle()
                 {
                     sx1272_debug_if( SX1272_DEBUG_ENABLED, "...AND REPLY IS RIGHT\n");
 
-                    uint16_t payload = protocol_get_latest_received_reply_payload();
+                    replyPayload = protocol_get_latest_received_reply_payload();
 
-                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_RIGHT, payload);
+                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_RIGHT, replyPayload);
 
                     setState(INITIAL);
                 }
                 else
                 {
-                    sx1272_debug_if( SX1272_DEBUG_ENABLED, "...BUT REPLY IS WRONG (reply doesn't mach request)\n");
+                    sx1272_debug_if( SX1272_DEBUG_ENABLED, "...BUT REPLY IS WRONG\n");
 
                     updateAndNotifyConditionOutcome(OUTCOME_REPLY_WRONG, 0);
 

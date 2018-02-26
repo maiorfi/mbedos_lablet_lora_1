@@ -47,9 +47,9 @@ bool protocol_is_latest_received_reply_for_me()
     return LatestReceivedReplyDestinationAddress==MyAddress;
 }
 
-void protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize)
+void protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t replyPayload)
 {
-    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)ReplyMsg, LatestReceivedRequestCounter, MyAddress, LatestReceivedRequestSourceAddress);
+    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)ReplyMsg, replyPayload, MyAddress, LatestReceivedRequestSourceAddress);
 }
 
 bool protocol_is_latest_received_reply_right()
@@ -60,6 +60,11 @@ bool protocol_is_latest_received_reply_right()
 uint16_t protocol_get_latest_received_reply_payload()
 {
     return LatestReceivedReplyCounter;
+}
+
+uint16_t protocol_get_latest_received_request_payload()
+{
+    return LatestReceivedRequestCounter;
 }
 
 void protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize,
