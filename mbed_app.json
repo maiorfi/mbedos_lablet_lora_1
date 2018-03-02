@@ -1,10 +1,16 @@
 {
-    "config": {
+  "config": {
+    "thread_stack_size": {
+      "value": 1024
     },
-    "target_overrides": {
-      "*": {
-          "platform.stdio-baud-rate": 115200,
-          "platform.stdio-convert-newlines": false
-       }
+    "main_stack_size": {
+      "value": 1024
+    }
+  },
+  "target_overrides": {
+    "*": {
+      "platform.stdio-baud-rate": 115200,
+      "platform.stdio-convert-newlines": false
     }
   }
+}

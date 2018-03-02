@@ -5,3 +5,4 @@ mbed-os/features/mbedtls/*
 Debug/*
 Release/*
 Develop/*
+SX1272Lib_RTOS/*

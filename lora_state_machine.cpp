@@ -1,10 +1,27 @@
 #include "mbed.h"
 
-#include "sx1272-hal.h"
+#define USE_SX1276_RADIO_MODULE /*USE_SX1272_RADIO_MODULE*/
 
 /* Set this flag to '1' to display debug messages on the console */
-#define SX1272_DEBUG_ENABLED    1
-#include "sx1272-debug.h"
+#define SX127x_DEBUG_ENABLED    1
+
+#if defined USE_SX1272_RADIO_MODULE
+    #include "sx1272-hal.h"
+    #define sx127x_debug_if sx1272_debug_if
+    #include "sx1272-debug.h"
+
+    static SX1272MB2xAS Radio( NULL );
+
+#elif defined USE_SX1276_RADIO_MODULE
+    #include "sx1276-hal.h"
+    #define sx127x_debug_if sx1276_debug_if
+    #include "sx1276-debug.h"
+    
+    static SX1276MB1xAS Radio( NULL );
+
+#else
+    #error "Please specify a radio module"
+#endif
 
 #include "lora_protocol_impl.h"
 
@@ -50,8 +67,6 @@ static RadioEvents_t RadioEvents;
 /*
  *  Global variables declarations
  */
-static SX1272MB2xAS Radio( NULL );
-
 static Timer s_state_timer;
 
 Mutex lora_reply_cond_var_mutex;
@@ -97,7 +112,7 @@ void lora_event_proc_communication_cycle()
 
     if(elapsed_ms > STATE_MACHINE_STALE_STATE_TIMEOUT)
     {
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "...(state-machine timeout, resetting to initial state)...\n" );
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...(state-machine timeout, resetting to initial state)...\n" );
 
         setState(INITIAL);
     }
@@ -109,7 +124,7 @@ void lora_event_proc_communication_cycle()
     {
         case INITIAL:
 
-            //sx1272_debug_if( SX1272_DEBUG_ENABLED, "--- INITIAL STATE ---\n");
+            //sx127x_debug_if( SX127x_DEBUG_ENABLED, "--- INITIAL STATE ---\n");
 
             Radio.Sleep();
 
@@ -122,35 +137,35 @@ void lora_event_proc_communication_cycle()
             break;
 
         case RX_WAITING_FOR_REQUEST:
-            //sx1272_debug_if( SX1272_DEBUG_ENABLED, "...(waiting for request)...\n" );
+            //sx127x_debug_if( SX127x_DEBUG_ENABLED, "...(waiting for request)...\n" );
             break;
 
         case RX_WAITING_FOR_REPLY:
-            //sx1272_debug_if( SX1272_DEBUG_ENABLED, "...(waiting for reply)...\n" );
+            //sx127x_debug_if( SX127x_DEBUG_ENABLED, "...(waiting for reply)...\n" );
             break;
 
         case RX_DONE_RECEIVED_REQUEST:
 
             protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "*** REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
             
             if(!protocol_is_latest_received_request_for_me())
             {
-                sx1272_debug_if( SX1272_DEBUG_ENABLED, "...request is not for me\n");
+                sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request is not for me\n");
 
                 setState(INITIAL);
                 
                 break;
             }
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...REQUEST IS FOR ME...\n");
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...REQUEST IS FOR ME...\n");
 
             requestPayload = protocol_get_latest_received_request_payload();
 
             if(!protocol_should_i_reply_to_latest_received_request())
             {
-                sx1272_debug_if( SX1272_DEBUG_ENABLED, "...but I should not reply\n");
+                sx127x_debug_if( SX127x_DEBUG_ENABLED, "...but I should not reply\n");
 
                 notify_request_payload(requestPayload);
 
@@ -159,7 +174,7 @@ void lora_event_proc_communication_cycle()
                 break;
             }
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...AND I SHOULD REPLY...\n");
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...AND I SHOULD REPLY...\n");
 
             replyPayload = notify_request_payload_and_get_reply_payload(requestPayload);
 
@@ -180,22 +195,22 @@ void lora_event_proc_communication_cycle()
 
             protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "*** REPLY RECEIVED ('%s') ***\n", dumpBuffer);
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** REPLY RECEIVED ('%s') ***\n", dumpBuffer);
             
             if(!protocol_is_latest_received_reply_for_me())
             {
-                sx1272_debug_if( SX1272_DEBUG_ENABLED, "...reply is not for me, ignoring...\n");
+                sx127x_debug_if( SX127x_DEBUG_ENABLED, "...reply is not for me, ignoring...\n");
 
                 Radio.Sleep();
                 Radio.Rx(RX_TIMEOUT_VALUE);
             }
             else
             {
-                sx1272_debug_if( SX1272_DEBUG_ENABLED, "...REPLY IS FOR ME...\n");
+                sx127x_debug_if( SX127x_DEBUG_ENABLED, "...REPLY IS FOR ME...\n");
 
                 if(protocol_is_latest_received_reply_right())
                 {
-                    sx1272_debug_if( SX1272_DEBUG_ENABLED, "...AND REPLY IS RIGHT\n");
+                    sx127x_debug_if( SX127x_DEBUG_ENABLED, "...AND REPLY IS RIGHT\n");
 
                     replyPayload = protocol_get_latest_received_reply_payload();
 
@@ -205,7 +220,7 @@ void lora_event_proc_communication_cycle()
                 }
                 else
                 {
-                    sx1272_debug_if( SX1272_DEBUG_ENABLED, "...BUT REPLY IS WRONG\n");
+                    sx127x_debug_if( SX127x_DEBUG_ENABLED, "...BUT REPLY IS WRONG\n");
 
                     updateAndNotifyConditionOutcome(OUTCOME_REPLY_WRONG, 0);
 
@@ -217,13 +232,13 @@ void lora_event_proc_communication_cycle()
 
         case TX_DONE_SENT_REQUEST:
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...request sent...\n" );
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request sent...\n" );
 
             Radio.Sleep();
 
             if(!protocol_should_i_wait_for_reply_for_latest_sent_request())
             {
-                sx1272_debug_if( SX1272_DEBUG_ENABLED, "...but I should not wait for reply\n" );
+                sx127x_debug_if( SX127x_DEBUG_ENABLED, "...but I should not wait for reply\n" );
 
                 updateAndNotifyConditionOutcome(OUTCOME_REPLY_NOT_NEEDED, 0);
 
@@ -232,7 +247,7 @@ void lora_event_proc_communication_cycle()
                 break;
             }
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...waiting for reply...\n" );
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...waiting for reply...\n" );
             
             setState(RX_WAITING_FOR_REPLY);
 
@@ -242,7 +257,7 @@ void lora_event_proc_communication_cycle()
 
         case TX_DONE_SENT_REPLY:
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...REPLY SENT\n" ); 
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...REPLY SENT\n" ); 
            
             setState(INITIAL);
             
@@ -250,13 +265,13 @@ void lora_event_proc_communication_cycle()
 
         case TX_WAITING_FOR_REQUEST_SENT:
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...waiting for request being sent...\n" ); 
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...waiting for request being sent...\n" ); 
 
             break;
 
         case TX_WAITING_FOR_REPLY_SENT:
 
-            sx1272_debug_if( SX1272_DEBUG_ENABLED, "...waiting for reply being sent...\n" ); 
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...waiting for reply being sent...\n" ); 
 
             break;
     }
@@ -276,7 +291,7 @@ void lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestination
 
     protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-    sx1272_debug_if( SX1272_DEBUG_ENABLED, "\n*** SEND REQUEST : '%s' ***\n", dumpBuffer);
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "\n*** SEND REQUEST : '%s' ***\n", dumpBuffer);
 
     setState(TX_WAITING_FOR_REQUEST_SENT);
 
@@ -285,17 +300,17 @@ void lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestination
 
 void OnTxDone( void )
 {
-    sx1272_debug_if( SX1272_DEBUG_ENABLED, "> OnTxDone\n" );
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "> OnTxDone\n" );
 
     if(getState() == TX_WAITING_FOR_REQUEST_SENT)
     {
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "...request tx done...\n" );
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request tx done...\n" );
 
         setState(TX_DONE_SENT_REQUEST);
     }
     else if (getState() == TX_WAITING_FOR_REPLY_SENT)
     {
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "...reply tx done...\n" );
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...reply tx done...\n" );
 
         setState(TX_DONE_SENT_REPLY);
     }
@@ -303,7 +318,7 @@ void OnTxDone( void )
  
 void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
 {
-    sx1272_debug_if( SX1272_DEBUG_ENABLED, "> OnRxDone (RSSI:%d, SNR:%d): %s (len: %d) \n", rssi, snr, (const char*)payload, size);
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "> OnRxDone (RSSI:%d, SNR:%d): %s (len: %d) \n", rssi, snr, (const char*)payload, size);
 
     if( size == 0 ) return;
     
@@ -311,7 +326,7 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
 
     if(getState() == RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
     {
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "...request rx done...\n" );
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request rx done...\n" );
 
         protocol_process_received_data_as_request();
 
@@ -319,7 +334,7 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
     }
     else if(getState() == RX_WAITING_FOR_REPLY && protocol_is_received_data_a_reply())
     { 
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "...reply rx done...\n" );
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...reply rx done...\n" );
 
         protocol_process_received_data_as_reply();
 
@@ -331,7 +346,7 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
 
         protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
         
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "...valid but unexpected rx done ('%s'), ignoring...\n", dumpBuffer);
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...valid but unexpected rx done ('%s'), ignoring...\n", dumpBuffer);
 
         Radio.Sleep();
         Radio.Rx(RX_TIMEOUT_VALUE);
@@ -340,7 +355,7 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
  
 void OnTxTimeout( void )
 {
-    sx1272_debug_if( SX1272_DEBUG_ENABLED, "> OnTxTimeout\n" );
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "> OnTxTimeout\n" );
 
     if(getState() == TX_WAITING_FOR_REQUEST_SENT)
     {
@@ -356,17 +371,17 @@ void OnTxTimeout( void )
  
 void OnRxTimeout( void )
 {
-    // sx1272_debug_if( SX1272_DEBUG_ENABLED, "> OnRxTimeout\n" );
+    // sx127x_debug_if( SX127x_DEBUG_ENABLED, "> OnRxTimeout\n" );
 
     if(getState() != RX_WAITING_FOR_REQUEST && getState() != RX_WAITING_FOR_REPLY) return;
 
     if(getState() == RX_WAITING_FOR_REQUEST)
     {
-        // sx1272_debug_if( getState() == RX_WAITING_FOR_REQUEST, "...rx timeout while waiting for request: restarting for request...\n" );
+        // sx127x_debug_if( getState() == RX_WAITING_FOR_REQUEST, "...rx timeout while waiting for request: restarting for request...\n" );
     }
     else if(getState() == RX_WAITING_FOR_REPLY)
     {
-        sx1272_debug_if(SX1272_DEBUG_ENABLED , "...rx TIMEOUT while WAITING for REPLY: restarting waiting for request...\n" );
+        sx127x_debug_if(SX127x_DEBUG_ENABLED , "...rx TIMEOUT while WAITING for REPLY: restarting waiting for request...\n" );
 
         updateAndNotifyConditionOutcome(OUTCOME_WAITING_FOR_REPLY_TIMEOUT, 0);
     }
@@ -380,11 +395,11 @@ void OnRxTimeout( void )
  
 void OnRxError( void )
 {
-    sx1272_debug_if( SX1272_DEBUG_ENABLED, "> OnRxError\n" );
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "> OnRxError\n" );
 
     setState(INITIAL);
     
-    sx1272_debug_if( SX1272_DEBUG_ENABLED, "...rx error: resetting state to idle...\n" );
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "...rx error: resetting state to idle...\n" );
 }
 
 int lora_state_machine_initialize(uint8_t myAddress, Thread* thread, EventQueue* eventQueue)
@@ -407,16 +422,21 @@ int lora_state_machine_initialize(uint8_t myAddress, Thread* thread, EventQueue*
     // verify the connection with the board
     while( Radio.Read( REG_VERSION ) == 0x00  )
     {
-        sx1272_debug_if( SX1272_DEBUG_ENABLED, "Radio could not be detected!\n");
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "Radio could not be detected!\n");
         return -1;
     }
  
-    sx1272_debug_if( ( SX1272_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1272MB2XAS ) ), " > Board Type: SX1272MB2xAS <\n" );
+    //sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1272MB2XAS ) ), " > Board Type: SX1272MB2xAS <\n" );
+
+    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ), "\n\r > Board Type: SX1276MB1LAS < \n\r" );
+    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ), "\n\r > Board Type: SX1276MB1MAS < \n\r" );
+    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == RFM95_SX1276 ) ), "\n\r > Board Type: RFM95_SX1276 < \n\r" );
+    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == MURATA_SX1276 ) ), "\n\r > Board Type: MURATA_SX1276 < \n\r" );
  
     Radio.SetChannel( RF_FREQUENCY ); 
  
-    sx1272_debug_if( LORA_FHSS_ENABLED, " > LORA FHSS Mode <\n" );
-    sx1272_debug_if( !LORA_FHSS_ENABLED, " > LORA Mode <\n" );
+    sx127x_debug_if( LORA_FHSS_ENABLED, " > LORA FHSS Mode <\n" );
+    sx127x_debug_if( !LORA_FHSS_ENABLED, " > LORA Mode <\n" );
  
     Radio.SetTxConfig( MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                          LORA_SPREADING_FACTOR, LORA_CODINGRATE,
