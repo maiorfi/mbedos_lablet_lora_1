@@ -1,11 +1,12 @@
 #include "mbed.h"
 
-#define USE_SX1276_RADIO_MODULE /*USE_SX1272_RADIO_MODULE*/
+#define /*USE_SX1276_RADIO_MODULE*/ USE_SX1272_RADIO_MODULE
 
 /* Set this flag to '1' to display debug messages on the console */
 #define SX127x_DEBUG_ENABLED    1
 
 #if defined USE_SX1272_RADIO_MODULE
+
     #include "sx1272-hal.h"
     #define sx127x_debug_if sx1272_debug_if
     #include "sx1272-debug.h"
@@ -13,6 +14,7 @@
     static SX1272MB2xAS Radio( NULL );
 
 #elif defined USE_SX1276_RADIO_MODULE
+
     #include "sx1276-hal.h"
     #define sx127x_debug_if sx1276_debug_if
     #include "sx1276-debug.h"
@@ -426,13 +428,19 @@ int lora_state_machine_initialize(uint8_t myAddress, Thread* thread, EventQueue*
         return -1;
     }
  
-    //sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1272MB2XAS ) ), " > Board Type: SX1272MB2xAS <\n" );
+    #if defined USE_SX1272_RADIO_MODULE
 
-    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ), "\n\r > Board Type: SX1276MB1LAS < \n\r" );
-    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ), "\n\r > Board Type: SX1276MB1MAS < \n\r" );
-    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == RFM95_SX1276 ) ), "\n\r > Board Type: RFM95_SX1276 < \n\r" );
-    sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == MURATA_SX1276 ) ), "\n\r > Board Type: MURATA_SX1276 < \n\r" );
- 
+        sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1272MB2XAS ) ), " > Board Type: SX1272MB2xAS <\n" );
+
+    #elif defined USE_SX1276_RADIO_MODULE
+    
+        sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ), "\n\r > Board Type: SX1276MB1LAS < \n\r" );
+        sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ), "\n\r > Board Type: SX1276MB1MAS < \n\r" );
+        sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == RFM95_SX1276 ) ), "\n\r > Board Type: RFM95_SX1276 < \n\r" );
+        sx127x_debug_if( ( SX127x_DEBUG_ENABLED & ( Radio.DetectBoardType( ) == MURATA_SX1276 ) ), "\n\r > Board Type: MURATA_SX1276 < \n\r" );
+    
+    #endif
+
     Radio.SetChannel( RF_FREQUENCY ); 
  
     sx127x_debug_if( LORA_FHSS_ENABLED, " > LORA FHSS Mode <\n" );
