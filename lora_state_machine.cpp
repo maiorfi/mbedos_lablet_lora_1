@@ -404,13 +404,12 @@ void OnRxError( void )
     sx127x_debug_if( SX127x_DEBUG_ENABLED, "...rx error: resetting state to idle...\n" );
 }
 
-int lora_state_machine_initialize(uint8_t myAddress, Thread* thread, EventQueue* eventQueue)
+int lora_state_machine_initialize(uint8_t myAddress, EventQueue* eventQueue)
 {
     protocol_initialize(myAddress);
 
     // Initialize Radio driver
 
-    Radio.assign_events_queue_thread(thread);
     Radio.assign_events_queue(eventQueue);
 
     RadioEvents.TxDone = OnTxDone;
