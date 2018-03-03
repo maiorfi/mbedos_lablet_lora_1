@@ -33,9 +33,10 @@ static uint16_t s_host_Counter=0;
 #define SEND_LORA_REQUEST_TIMEOUT 3000 // in ms
 #define SEND_HOST_REQUEST_TIMEOUT 3000 // in ms
 
+static bool s_toggler;
+
 ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress, uint16_t* outReplyPayload)
 {
-    ReplyOutcomes_t outcome=OUTCOME_UNDEFINED;
     Timer timer;
 
     lora_reply_cond_var_mutex.lock();
@@ -45,9 +46,15 @@ ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAdd
     bool timedOut=false;
     uint32_t timeLeft=SEND_LORA_REQUEST_TIMEOUT;
 
-    lora_reply_outcome=OUTCOME_UNDEFINED;
+    lora_reply_outcome=OUTCOME_PENDING;
 
-    lora_state_machine_send_request(argCounter, argDestinationAddress);
+    ReplyOutcomes_t outcome = lora_state_machine_send_request(argCounter, argDestinationAddress);
+
+    if(outcome != OUTCOME_PENDING)
+    {
+        lora_reply_cond_var_mutex.unlock();
+        return outcome;
+    }
 
     do
     {
@@ -56,7 +63,7 @@ ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAdd
         uint32_t elapsed = timer.read_ms();
         timeLeft = elapsed > SEND_LORA_REQUEST_TIMEOUT ? 0 : SEND_LORA_REQUEST_TIMEOUT - elapsed;
 
-    } while(lora_reply_outcome == OUTCOME_UNDEFINED && !timedOut);
+    } while(lora_reply_outcome == OUTCOME_PENDING && !timedOut);
 
     outcome=timedOut ? OUTCOME_TIMEOUT_STUCK : lora_reply_outcome;
 
@@ -69,7 +76,6 @@ ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAdd
 
 HostReplyOutcomes_t send_host_request(uint16_t argCounter, uint16_t* outReplyPayload)
 {
-    HostReplyOutcomes_t outcome=HOST_OUTCOME_UNDEFINED;
     Timer timer;
 
     host_reply_cond_var_mutex.lock();
@@ -79,9 +85,15 @@ HostReplyOutcomes_t send_host_request(uint16_t argCounter, uint16_t* outReplyPay
     bool timedOut=false;
     uint32_t timeLeft=SEND_HOST_REQUEST_TIMEOUT;
 
-    host_reply_outcome=HOST_OUTCOME_UNDEFINED;
+    host_reply_outcome=HOST_OUTCOME_PENDING;
 
-    host_state_machine_send_request(argCounter);
+    HostReplyOutcomes_t outcome = host_state_machine_send_request(argCounter);
+
+    if(outcome != HOST_OUTCOME_PENDING)
+    {
+        host_reply_cond_var_mutex.unlock();
+        return outcome;
+    }
 
     do
     {
@@ -90,7 +102,7 @@ HostReplyOutcomes_t send_host_request(uint16_t argCounter, uint16_t* outReplyPay
         uint32_t elapsed = timer.read_ms();
         timeLeft = elapsed > SEND_HOST_REQUEST_TIMEOUT ? 0 : SEND_HOST_REQUEST_TIMEOUT - elapsed;
 
-    } while(host_reply_outcome == HOST_OUTCOME_UNDEFINED && !timedOut);
+    } while(host_reply_outcome == HOST_OUTCOME_PENDING && !timedOut);
 
     outcome=timedOut ? HOST_OUTCOME_TIMEOUT_STUCK : host_reply_outcome;
 
@@ -109,13 +121,13 @@ void event_proc_send_data_through_lora()
     if(s_lora_DestinationAddress==s_lora_MyAddress) s_lora_DestinationAddress++;
     if(s_lora_DestinationAddress>MAX_DESTINATION_ADDRESS) s_lora_DestinationAddress=0;
 
-    printf("\n\n___________ BEGIN %d -> %d ___________\n", s_lora_Counter, s_lora_DestinationAddress);
+    printf("\n\n___________ LORA BEGIN %d -> %d ___________\n", s_lora_Counter, s_lora_DestinationAddress);
 
     uint16_t outReplyPayload=0xFFFF;
 
     int outcome = send_lora_request(s_lora_Counter, s_lora_DestinationAddress, &outReplyPayload);
 
-    printf("__________   END %d (0x%X)  __________\n", outcome, outReplyPayload);
+    printf("__________ LORA END %d (0x%X) __________\n", outcome, outReplyPayload);
 }
 
 void event_proc_send_data_to_host()
@@ -128,13 +140,15 @@ void event_proc_send_data_to_host()
 
     int outcome = send_host_request(s_host_Counter, &outReplyPayload);
 
-    printf("__________   HOST END %d (0x%X)  __________\n", outcome, outReplyPayload);
+    printf("__________ HOST END %d (0x%X) __________\n", outcome, outReplyPayload);
 }
 
 void btn_interrupt_handler()
 {
-    //s_eq_main.call(event_proc_send_data_through_lora);
-    s_eq_main.call(event_proc_send_data_to_host);
+    if(s_toggler) s_eq_main.call(event_proc_send_data_through_lora);
+    else s_eq_main.call(event_proc_send_data_to_host);
+
+    s_toggler=!s_toggler;
 }
 
 void lora_state_machine_notify_request_payload_callback_instance(uint16_t requestPayload)

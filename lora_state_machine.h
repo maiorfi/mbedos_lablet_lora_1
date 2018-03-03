@@ -1,10 +1,11 @@
 typedef enum
 {
-    OUTCOME_UNDEFINED=-1,
+    OUTCOME_PENDING=-1,
     OUTCOME_WAITING_FOR_REPLY_TIMEOUT=-2,
     OUTCOME_REPLY_WRONG=-3,
     OUTCOME_TIMEOUT_WAITING_FOR_REQUEST_SENT=-4,
     OUTCOME_TIMEOUT_WAITING_FOR_REPLY_SENT=-5,
+    OUTCOME_INVALID_STATE=-6,
     OUTCOME_TIMEOUT_STUCK=-10,
     OUTCOME_REPLY_RIGHT=1,
     OUTCOME_REPLY_NOT_NEEDED=0,
@@ -23,5 +24,5 @@ extern notify_request_payload_callback_t lora_state_machine_notify_request_paylo
 extern notify_request_payload_and_get_reply_payload_callback_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback;
 
 int lora_state_machine_initialize(uint8_t myAddress, EventQueue* eventQueue);
-void lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress);
+ReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress);
 void lora_event_proc_communication_cycle();

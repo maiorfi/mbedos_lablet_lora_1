@@ -3,7 +3,8 @@
 #include "host_protocol_impl.h"
 #include "host_state_machine.h"
 
-#define STATE_MACHINE_STALE_STATE_TIMEOUT               (60000)      // in ms
+#define WAIT_FOR_REPLY_TIMEOUT                          (2000)      // in ms
+#define STATE_MACHINE_STALE_STATE_TIMEOUT               (WAIT_FOR_REPLY_TIMEOUT+500)      // in ms
 
 #define HOST_MESSAGES_BUFFER_SIZE 32
 
@@ -28,6 +29,8 @@ typedef enum
 static HostAppStates_t State = INITIAL;
 
 static Timer s_state_timer;
+
+static Timer s_wait_for_reply_timer;
  
 /*
  *  Global variables declarations
@@ -71,7 +74,7 @@ void host_event_proc_communication_cycle()
 
     if(elapsed_ms > STATE_MACHINE_STALE_STATE_TIMEOUT)
     {
-        printf("...(host state-machine timeout, resetting to initial state)...\n" );
+        //printf("...(host state-machine timeout, resetting to initial state)...\n" );
 
         setState(INITIAL);
     }
@@ -81,11 +84,14 @@ void host_event_proc_communication_cycle()
 
     char dumpBuffer[HOST_MESSAGES_BUFFER_SIZE];
 
+    uint16_t bufferSize=HOST_MESSAGES_BUFFER_SIZE;
+    uint8_t buffer[HOST_MESSAGES_BUFFER_SIZE];
+
     switch( getState() )
     {
         case INITIAL:
 
-            printf("--- HOST INITIAL STATE ---\n");
+            //printf("--- HOST INITIAL STATE ---\n");
 
             host_protocol_reset();
             
@@ -94,11 +100,21 @@ void host_event_proc_communication_cycle()
             break;
 
         case RX_WAITING_FOR_REQUEST:
-            //printf("...(waiting for request)...\n" );
+            //printf("...(waiting for host request)...\n" );
             break;
 
         case RX_WAITING_FOR_REPLY:
-            //printf("...(waiting for reply)...\n" );
+            //printf("...(waiting for host reply)...\n" );
+
+            if(s_wait_for_reply_timer.read_ms() > WAIT_FOR_REPLY_TIMEOUT)
+            {
+                printf("...(timeout waiting for host reply)...\n" );
+
+                updateAndNotifyConditionOutcome(HOST_OUTCOME_WAITING_FOR_REPLY_TIMEOUT, 0);
+
+                setState(INITIAL);
+            }
+
             break;
 
         case RX_DONE_RECEIVED_REQUEST:
@@ -125,7 +141,8 @@ void host_event_proc_communication_cycle()
             replyPayload = notify_request_payload_and_get_reply_payload(requestPayload);
             
             // Send the REPLY frame
-            host_protocol_send_reply_command(replyPayload);
+            host_protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload);
+            host_protocol_send_reply_command(buffer, bufferSize);
 
             setState(TX_DONE_SENT_REPLY);
 
@@ -177,6 +194,8 @@ void host_event_proc_communication_cycle()
             
             setState(RX_WAITING_FOR_REPLY);
 
+            s_wait_for_reply_timer.reset();
+
             break;
 
         case TX_DONE_SENT_REPLY:
@@ -189,25 +208,20 @@ void host_event_proc_communication_cycle()
     }
 }
 
-void host_state_machine_send_request(uint16_t argCounter)
+HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter)
 {
     uint16_t bufferSize=HOST_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[HOST_MESSAGES_BUFFER_SIZE];
 
-    if(getState() != RX_WAITING_FOR_REQUEST) return;
-
+    if(getState() != RX_WAITING_FOR_REQUEST) return HOST_OUTCOME_INVALID_STATE;
+    
     // Send the REQUEST frame
     host_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter);
-
-    char dumpBuffer[HOST_MESSAGES_BUFFER_SIZE];
-
-    host_protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, HOST_MESSAGES_BUFFER_SIZE);
-
-    printf("\n*** SEND HOST REQUEST : '%s' ***\n", dumpBuffer);
-
-    host_protocol_send_request_command(argCounter);
+    host_protocol_send_request_command(buffer, bufferSize);
 
     setState(TX_DONE_SENT_REQUEST);
+
+    return HOST_OUTCOME_PENDING;
 }
 
 void notify_command_received_callback()
@@ -241,6 +255,7 @@ int host_state_machine_initialize(EventQueue* eventQueue)
     host_protocol_notify_command_received_callback_instance = notify_command_received_callback;
 
     s_state_timer.start();
+    s_wait_for_reply_timer.start();
 
     return 0;
 }

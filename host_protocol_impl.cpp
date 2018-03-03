@@ -18,7 +18,7 @@ static EventQueue s_eq_serial_worker;
 static Thread s_thread_command_handler_worker;
 static EventQueue* s_p_eq_command_handler_worker;
 
-#define PROTOCOL_TIMEOUT_MS (50000)
+#define PROTOCOL_TIMEOUT_MS (1000)
 
 static ProtocolStates current_protocol_state;
 static std::string current_protocol_content;
@@ -38,7 +38,7 @@ host_protocol_notify_command_received_callback_t host_protocol_notify_command_re
 
 void event_proc_command_handler(std::string *pcontent)
 {
-    if (pcontent->size() != 0) printf("[HOST COMMAND_HANDLER - %d] Ricevuto Comando: '%s'\n", s_timer_1.read_ms(), pcontent->c_str());
+    //if (pcontent->size() != 0) printf("[HOST COMMAND_HANDLER - %d] Ricevuto Comando: '%s'\n", s_timer_1.read_ms(), pcontent->c_str());
 
     s_latest_received_command = *pcontent;
 
@@ -154,37 +154,43 @@ uint16_t host_protocol_get_latest_received_request_payload()
     return atoi(s_latest_received_command.c_str());
 }
 
+uint16_t host_protocol_get_latest_sent_request_payload()
+{
+    return atoi(s_latest_sent_command.c_str());
+}
+
 bool host_protocol_should_i_reply_to_latest_received_request()
 {
-    // TODO : implementare
     return host_protocol_get_latest_received_request_payload() % 2 == 0;
 }
 
 bool host_protocol_should_i_wait_for_reply_for_latest_sent_request()
 {
-    // TODO : implementare
-    return host_protocol_get_latest_received_reply_payload() % 2 == 0;
+    return host_protocol_get_latest_sent_request_payload() % 2 == 0;
 }
 
-void host_protocol_send_reply_command(uint16_t replyPayload)
+void host_protocol_send_request_command(uint8_t* buffer, uint16_t bufferSize)
 {
-    pc_buffered_serial.printf("^%u@", replyPayload);
+    pc_buffered_serial.write(buffer, strlen((const char*)buffer));
+
+    s_latest_sent_command=(const char*)buffer;
 }
 
-void host_protocol_send_request_command(uint16_t requestPayload)
+void host_protocol_send_reply_command(uint8_t* buffer, uint16_t bufferSize)
 {
-    pc_buffered_serial.printf("!%u#", requestPayload);
-}
+    pc_buffered_serial.write(buffer, strlen((const char*)buffer));
 
-bool host_protocol_is_latest_received_reply_right()
-{
-    // TODO : implementare
-    return true;
+    s_latest_sent_command=(const char*)buffer;
 }
 
 void host_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter)
 {
     sprintf((char*)buffer,"!%u#", argCounter);
+}
+
+void host_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t replyPayload)
+{
+    sprintf((char*)buffer,"!%u#", replyPayload);
 }
 
 bool host_protocol_is_latest_received_command_a_request()
@@ -195,4 +201,9 @@ bool host_protocol_is_latest_received_command_a_request()
 bool host_protocol_is_latest_received_command_a_reply()
 {
     return s_latest_received_command[0]=='0';
+}
+
+bool host_protocol_is_latest_received_reply_right()
+{
+    return atoi(s_latest_received_command.c_str()) % 2 == 0;
 }

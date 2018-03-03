@@ -20,12 +20,13 @@ uint16_t host_protocol_get_latest_received_request_payload();
 bool host_protocol_should_i_reply_to_latest_received_request();
 bool host_protocol_should_i_wait_for_reply_for_latest_sent_request();
 
-void host_protocol_send_reply_command(uint16_t replyPayload);
-void host_protocol_send_request_command(uint16_t requestPayload);
+void host_protocol_send_reply_command(uint8_t* buffer, uint16_t bufferSize);
+void host_protocol_send_request_command(uint8_t* buffer, uint16_t bufferSize);
 
 bool host_protocol_is_latest_received_reply_right();
 
 void host_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter);
+void host_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t replyPayload);
 
 bool host_protocol_is_latest_received_command_a_request();
 bool host_protocol_is_latest_received_command_a_reply();

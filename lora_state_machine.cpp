@@ -279,12 +279,12 @@ void lora_event_proc_communication_cycle()
     }
 }
 
-void lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress)
+ReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress)
 {
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    if(getState() != RX_WAITING_FOR_REQUEST) return;
+    if(getState() != RX_WAITING_FOR_REQUEST) return OUTCOME_INVALID_STATE;
 
     // Send the REQUEST frame
     protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress);
@@ -298,6 +298,8 @@ void lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestination
     setState(TX_WAITING_FOR_REQUEST_SENT);
 
     Radio.Send( buffer, bufferSize );
+
+    return OUTCOME_PENDING;
 }
 
 void OnTxDone( void )
