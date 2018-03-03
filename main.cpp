@@ -155,8 +155,8 @@ void event_proc_send_data_to_host()
 
 void btn_interrupt_handler()
 {
-    /*if(s_toggler) s_eq_main.call(event_proc_send_data_through_lora);
-    else */s_eq_main.call(event_proc_send_data_to_host);
+    if(s_toggler) s_eq_main.call(event_proc_send_data_through_lora);
+    else s_eq_main.call(event_proc_send_data_to_host);
 
     s_toggler=!s_toggler;
 }
