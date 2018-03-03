@@ -161,9 +161,9 @@ void btn_interrupt_handler()
     s_toggler=!s_toggler;
 }
 
-void lora_state_machine_notify_request_payload_callback_instance(uint16_t requestPayload)
+void on_lora_state_machine_notify_request_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    printf("lora_state_machine_notify_request_payload_callback_instance: %u\n", requestPayload);
+    printf("lora_state_machine_notify_request_payload_callback: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
 }
 
 uint16_t loraGetReplyPayloadForRequestPayload(uint16_t requestPayload)
@@ -171,14 +171,16 @@ uint16_t loraGetReplyPayloadForRequestPayload(uint16_t requestPayload)
     return requestPayload;
 }
 
-uint16_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback_instance(uint16_t requestPayload)
+uint16_t on_lora_state_machine_notify_request_and_get_reply_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    printf("lora_state_machine_notify_request_payload_and_get_reply_payload_callback_instance: %u...returning %u\n", requestPayload, requestPayload);
+    uint16_t replyPayload = loraGetReplyPayloadForRequestPayload(requestPayload);
 
-    return loraGetReplyPayloadForRequestPayload(requestPayload);
+    printf("lora_state_machine_notify_request_and_get_reply_callback: Source=%u, Payload=%u...returning %u\n", requestSourceAddress, requestPayload, replyPayload);
+
+    return replyPayload;
 }
 
-void host_state_machine_notify_request_payload_callback_instance(uint8_t requestSourceAddress, uint16_t requestPayload)
+void on_host_state_machine_notify_request_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
     printf("host_state_machine_notify_request_payload_callback: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
 }
@@ -188,11 +190,13 @@ uint16_t hostGetReplyPayloadForRequestPayload(uint16_t requestPayload)
     return requestPayload;
 }
 
-uint16_t host_state_machine_notify_request_payload_and_get_reply_payload_callback_instance(uint8_t requestSourceAddress, uint16_t requestPayload)
+uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    printf("host_state_machine_notify_request_payload_and_get_reply_payload_callback: Source=%u, Payload=%u...returning %u\n", requestSourceAddress, requestPayload, requestPayload);
+    uint16_t replyPayload = hostGetReplyPayloadForRequestPayload(requestPayload);;
+    
+    printf("host_state_machine_notify_request_payload_and_get_reply_payload_callback: Source=%u, Payload=%u...returning %u\n", requestSourceAddress, requestPayload, replyPayload);
 
-    return hostGetReplyPayloadForRequestPayload(requestPayload);
+    return replyPayload;
 }
  
 int main( void ) 
@@ -228,11 +232,11 @@ int main( void )
         return host_init_ret_val;
     }
 
-    lora_state_machine_notify_request_payload_callback = lora_state_machine_notify_request_payload_callback_instance;
-    lora_state_machine_notify_request_payload_and_get_reply_payload_callback = lora_state_machine_notify_request_payload_and_get_reply_payload_callback_instance;
+    lora_state_machine_notify_request_callback = on_lora_state_machine_notify_request_callback;
+    lora_state_machine_notify_request_and_get_reply_callback = on_lora_state_machine_notify_request_and_get_reply_callback;
 
-    host_state_machine_notify_request_payload_callback = host_state_machine_notify_request_payload_callback_instance;
-    host_state_machine_notify_request_payload_and_get_reply_payload_callback = host_state_machine_notify_request_payload_and_get_reply_payload_callback_instance;
+    host_state_machine_notify_request_callback = on_host_state_machine_notify_request_callback;
+    host_state_machine_notify_request_and_get_reply_callback = on_host_state_machine_notify_request_and_get_reply_callback;
 
     s_thread_manage_lora_communication.start(callback(&s_eq_manage_lora_communication, &EventQueue::dispatch_forever));
     s_thread_manage_host_communication.start(callback(&s_eq_manage_host_communication, &EventQueue::dispatch_forever));

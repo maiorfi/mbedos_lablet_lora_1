@@ -12,16 +12,16 @@ typedef enum
 
 } LoraReplyOutcomes_t;
 
-typedef void (*lora_notify_request_payload_callback_t)(uint16_t);
-typedef uint16_t (*lora_notify_request_payload_and_get_reply_payload_callback_t)(uint16_t);
+typedef void (*lora_notify_request_callback_t)(uint8_t, uint16_t);
+typedef uint16_t (*lora_notify_request_and_get_reply_callback_t)(uint8_t, uint16_t);
 
 extern Mutex lora_reply_cond_var_mutex;
 extern ConditionVariable lora_reply_cond_var;
 extern LoraReplyOutcomes_t lora_reply_outcome;
 extern uint16_t lora_reply_payload;
 
-extern lora_notify_request_payload_callback_t lora_state_machine_notify_request_payload_callback;
-extern lora_notify_request_payload_and_get_reply_payload_callback_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback;
+extern lora_notify_request_callback_t lora_state_machine_notify_request_callback;
+extern lora_notify_request_and_get_reply_callback_t lora_state_machine_notify_request_and_get_reply_callback;
 
 int lora_state_machine_initialize(uint8_t myAddress, EventQueue* eventQueue);
 LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress);

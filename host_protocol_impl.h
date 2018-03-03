@@ -18,7 +18,7 @@ uint16_t host_protocol_get_latest_received_reply_payload();
 uint8_t host_protocol_get_latest_received_reply_source_address();
 
 uint16_t host_protocol_get_latest_received_request_payload();
-uint8_t host_protocol_get_latest_received_request_destination_address();
+uint8_t host_protocol_get_latest_received_request_source_address();
 
 bool host_protocol_should_i_reply_to_latest_received_request();
 bool host_protocol_should_i_wait_for_reply_for_latest_sent_request();

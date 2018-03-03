@@ -76,8 +76,8 @@ ConditionVariable lora_reply_cond_var(lora_reply_cond_var_mutex);
 LoraReplyOutcomes_t lora_reply_outcome;
 uint16_t lora_reply_payload;
 
-lora_notify_request_payload_callback_t lora_state_machine_notify_request_payload_callback;
-lora_notify_request_payload_and_get_reply_payload_callback_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback;
+lora_notify_request_callback_t lora_state_machine_notify_request_callback;
+lora_notify_request_and_get_reply_callback_t lora_state_machine_notify_request_and_get_reply_callback;
 
 inline AppStates_t getState() { return State;}
 AppStates_t setState(AppStates_t newState) { AppStates_t previousState=State; State=newState; s_state_timer.reset(); return previousState;}
@@ -91,14 +91,14 @@ inline void updateAndNotifyConditionOutcome(LoraReplyOutcomes_t outcome, uint16_
     lora_reply_cond_var_mutex.unlock();
 }
 
-void notify_request_payload(uint16_t requestPayload)
+void notify_request(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    if(lora_state_machine_notify_request_payload_callback) lora_state_machine_notify_request_payload_callback(requestPayload);
+    if(lora_state_machine_notify_request_callback) lora_state_machine_notify_request_callback(requestSourceAddress, requestPayload);
 }
 
-uint16_t notify_request_payload_and_get_reply_payload(uint16_t requestPayload)
+uint16_t notify_request_and_get_reply(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    if(lora_state_machine_notify_request_payload_and_get_reply_payload_callback) return lora_state_machine_notify_request_payload_and_get_reply_payload_callback(requestPayload);
+    if(lora_state_machine_notify_request_and_get_reply_callback) return lora_state_machine_notify_request_and_get_reply_callback(requestSourceAddress, requestPayload);
     
     return 0;
 }
@@ -121,6 +121,8 @@ void lora_event_proc_communication_cycle()
 
     uint16_t requestPayload;
     uint16_t replyPayload;
+    uint8_t requestSourceAddress;
+    uint8_t replyDestinationAddress;
 
     switch( getState() )
     {
@@ -130,7 +132,7 @@ void lora_event_proc_communication_cycle()
 
             Radio.Sleep();
 
-            protocol_reset();
+            lora_protocol_reset();
             
             setState(RX_WAITING_FOR_REQUEST);
             
@@ -148,11 +150,11 @@ void lora_event_proc_communication_cycle()
 
         case RX_DONE_RECEIVED_REQUEST:
 
-            protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
+            lora_protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
 
             sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
             
-            if(!protocol_is_latest_received_request_for_me())
+            if(!lora_protocol_is_latest_received_request_for_me())
             {
                 sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request is not for me\n");
 
@@ -163,13 +165,14 @@ void lora_event_proc_communication_cycle()
 
             sx127x_debug_if( SX127x_DEBUG_ENABLED, "...REQUEST IS FOR ME...\n");
 
-            requestPayload = protocol_get_latest_received_request_payload();
+            requestSourceAddress = lora_protocol_get_latest_received_request_source_address();
+            requestPayload = lora_protocol_get_latest_received_request_payload();
 
-            if(!protocol_should_i_reply_to_latest_received_request())
+            if(!lora_protocol_should_i_reply_to_latest_received_request())
             {
                 sx127x_debug_if( SX127x_DEBUG_ENABLED, "...but I should not reply\n");
 
-                notify_request_payload(requestPayload);
+                notify_request(requestSourceAddress, requestPayload);
 
                 setState(INITIAL);
                 
@@ -178,7 +181,7 @@ void lora_event_proc_communication_cycle()
 
             sx127x_debug_if( SX127x_DEBUG_ENABLED, "...AND I SHOULD REPLY...\n");
 
-            replyPayload = notify_request_payload_and_get_reply_payload(requestPayload);
+            replyPayload = notify_request_and_get_reply(requestSourceAddress, requestPayload);
 
             setState(TX_WAITING_FOR_REPLY_SENT);
             
@@ -187,7 +190,7 @@ void lora_event_proc_communication_cycle()
             wait_ms(REQUEST_REPLY_DELAY);
 
             // Send the REPLY frame
-            protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload);
+            lora_protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload);
 
             Radio.Send( buffer, bufferSize );
 
@@ -195,11 +198,11 @@ void lora_event_proc_communication_cycle()
 
         case RX_DONE_RECEIVED_REPLY:
 
-            protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
+            lora_protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
 
             sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** REPLY RECEIVED ('%s') ***\n", dumpBuffer);
             
-            if(!protocol_is_latest_received_reply_for_me())
+            if(!lora_protocol_is_latest_received_reply_for_me())
             {
                 sx127x_debug_if( SX127x_DEBUG_ENABLED, "...reply is not for me, ignoring...\n");
 
@@ -210,11 +213,11 @@ void lora_event_proc_communication_cycle()
             {
                 sx127x_debug_if( SX127x_DEBUG_ENABLED, "...REPLY IS FOR ME...\n");
 
-                if(protocol_is_latest_received_reply_right())
+                if(lora_protocol_is_latest_received_reply_right())
                 {
                     sx127x_debug_if( SX127x_DEBUG_ENABLED, "...AND REPLY IS RIGHT\n");
 
-                    replyPayload = protocol_get_latest_received_reply_payload();
+                    replyPayload = lora_protocol_get_latest_received_reply_payload();
 
                     updateAndNotifyConditionOutcome(LORA_OUTCOME_REPLY_RIGHT, replyPayload);
 
@@ -238,7 +241,7 @@ void lora_event_proc_communication_cycle()
 
             Radio.Sleep();
 
-            if(!protocol_should_i_wait_for_reply_for_latest_sent_request())
+            if(!lora_protocol_should_i_wait_for_reply_for_latest_sent_request())
             {
                 sx127x_debug_if( SX127x_DEBUG_ENABLED, "...but I should not wait for reply\n" );
 
@@ -287,11 +290,11 @@ LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t
     if(getState() != RX_WAITING_FOR_REQUEST) return LORA_OUTCOME_INVALID_STATE;
 
     // Send the REQUEST frame
-    protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress);
+    lora_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress);
 
     char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, RADIO_MESSAGES_BUFFER_SIZE);
+    lora_protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, RADIO_MESSAGES_BUFFER_SIZE);
 
     sx127x_debug_if( SX127x_DEBUG_ENABLED, "\n*** SEND REQUEST : '%s' ***\n", dumpBuffer);
 
@@ -326,21 +329,21 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
 
     if( size == 0 ) return;
     
-    protocol_process_received_data(payload, size);
+    lora_protocol_process_received_data(payload, size);
 
-    if(getState() == RX_WAITING_FOR_REQUEST && protocol_is_received_data_a_request())
+    if(getState() == RX_WAITING_FOR_REQUEST && lora_protocol_is_received_data_a_request())
     {
         sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request rx done...\n" );
 
-        protocol_process_received_data_as_request();
+        lora_protocol_process_received_data_as_request();
 
         setState(RX_DONE_RECEIVED_REQUEST);
     }
-    else if(getState() == RX_WAITING_FOR_REPLY && protocol_is_received_data_a_reply())
+    else if(getState() == RX_WAITING_FOR_REPLY && lora_protocol_is_received_data_a_reply())
     { 
         sx127x_debug_if( SX127x_DEBUG_ENABLED, "...reply rx done...\n" );
 
-        protocol_process_received_data_as_reply();
+        lora_protocol_process_received_data_as_reply();
 
         setState(RX_DONE_RECEIVED_REPLY);
     }
@@ -348,7 +351,7 @@ void OnRxDone( uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr )
     {   
         char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-        protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
+        lora_protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
         
         sx127x_debug_if( SX127x_DEBUG_ENABLED, "...valid but unexpected rx done ('%s'), ignoring...\n", dumpBuffer);
 
@@ -408,7 +411,7 @@ void OnRxError( void )
 
 int lora_state_machine_initialize(uint8_t myAddress, EventQueue* eventQueue)
 {
-    protocol_initialize(myAddress);
+    lora_protocol_initialize(myAddress);
 
     // Initialize Radio driver
 

@@ -165,7 +165,7 @@ uint16_t host_protocol_get_latest_received_request_payload()
     return atoi(s_latest_received_vector[2].c_str());
 }
 
-uint8_t host_protocol_get_latest_received_request_destination_address()
+uint8_t host_protocol_get_latest_received_request_source_address()
 {
     return atoi(s_latest_received_vector[1].c_str());
 }

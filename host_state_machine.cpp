@@ -41,8 +41,8 @@ ConditionVariable host_reply_cond_var(host_reply_cond_var_mutex);
 HostReplyOutcomes_t host_reply_outcome;
 uint16_t host_reply_payload;
 
-host_notify_request_payload_callback_t host_state_machine_notify_request_payload_callback;
-host_notify_request_payload_and_get_reply_payload_callback_t host_state_machine_notify_request_payload_and_get_reply_payload_callback;
+host_notify_request_callback_t host_state_machine_notify_request_callback;
+host_notify_request_and_get_reply_callback_t host_state_machine_notify_request_and_get_reply_callback;
 
 static inline HostAppStates_t getState() { return State;}
 static HostAppStates_t setState(HostAppStates_t newState) { HostAppStates_t previousState=State; State=newState; s_state_timer.reset(); return previousState;}
@@ -56,14 +56,14 @@ static inline void updateAndNotifyConditionOutcome(HostReplyOutcomes_t outcome, 
     host_reply_cond_var_mutex.unlock();
 }
 
-static void notify_request_payload(uint8_t requestDestinationAddress, uint16_t requestPayload)
+static void notify_request(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    if(host_state_machine_notify_request_payload_callback) host_state_machine_notify_request_payload_callback(requestDestinationAddress, requestPayload);
+    if(host_state_machine_notify_request_callback) host_state_machine_notify_request_callback(requestSourceAddress, requestPayload);
 }
 
-static uint16_t notify_request_payload_and_get_reply_payload(uint8_t requestDestinationAddress, uint16_t requestPayload)
+static uint16_t notify_request_and_get_reply(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    if(host_state_machine_notify_request_payload_and_get_reply_payload_callback) return host_state_machine_notify_request_payload_and_get_reply_payload_callback(requestDestinationAddress, requestPayload);
+    if(host_state_machine_notify_request_and_get_reply_callback) return host_state_machine_notify_request_and_get_reply_callback(requestSourceAddress, requestPayload);
     
     return 0;
 }
@@ -81,7 +81,7 @@ void host_event_proc_communication_cycle()
 
     uint16_t requestPayload;
     uint16_t replyPayload;
-    uint8_t requestDestinationAddress;
+    uint8_t requestSourceAddress;
     uint8_t replyDestinationAddress;
 
     char dumpBuffer[HOST_MESSAGES_BUFFER_SIZE];
@@ -125,14 +125,14 @@ void host_event_proc_communication_cycle()
 
             printf("*** HOST REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
             
-            requestDestinationAddress = host_protocol_get_latest_received_request_destination_address();
+            requestSourceAddress = host_protocol_get_latest_received_request_source_address();
             requestPayload = host_protocol_get_latest_received_request_payload();
 
             if(!host_protocol_should_i_reply_to_latest_received_request())
             {
                 printf("...but I should not reply to host\n");
 
-                notify_request_payload(requestDestinationAddress, requestPayload);
+                notify_request(requestSourceAddress, requestPayload);
 
                 setState(INITIAL);
                 
@@ -141,10 +141,10 @@ void host_event_proc_communication_cycle()
 
             printf("...AND I SHOULD REPLY TO HOST...\n");
 
-            replyPayload = notify_request_payload_and_get_reply_payload(requestDestinationAddress, requestPayload);
+            replyPayload = notify_request_and_get_reply(requestSourceAddress, requestPayload);
             
             // Send the REPLY frame
-            host_protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload, requestDestinationAddress);
+            host_protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload, requestSourceAddress);
             host_protocol_send_reply_command(buffer, bufferSize);
 
             setState(TX_DONE_SENT_REPLY);
