@@ -26,10 +26,13 @@ static EventQueue s_eq_main;
 // Variabili per demo
 static uint8_t s_lora_MyAddress;
 
-static uint16_t s_lora_Counter=0;
-static uint8_t s_lora_DestinationAddress=0;
+static uint16_t s_lora_Counter=-1;
+static uint8_t s_lora_DestinationAddress=-1;
 
-static uint16_t s_host_Counter=0;
+static uint16_t s_host_Counter=-1;
+static uint8_t s_host_SourceAddress=-1;
+
+static int s_toggler_wheel=-1;
 
 #define MAX_DESTINATION_ADDRESS 4
 
@@ -74,7 +77,7 @@ LoraReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinatio
     return outcome;
 }
 
-HostReplyOutcomes_t send_host_request(uint16_t argCounter, uint16_t* outReplyPayload)
+HostReplyOutcomes_t send_host_request(uint16_t argCounter, uint8_t argSourceAddress, bool argRequiresReply, uint16_t* outReplyPayload)
 {
     Timer timer;
 
@@ -87,7 +90,7 @@ HostReplyOutcomes_t send_host_request(uint16_t argCounter, uint16_t* outReplyPay
 
     host_reply_outcome=HOST_OUTCOME_PENDING;
 
-    HostReplyOutcomes_t outcome = host_state_machine_send_request(argCounter);
+    HostReplyOutcomes_t outcome = host_state_machine_send_request(argCounter, argSourceAddress, argRequiresReply);
 
     if(outcome != HOST_OUTCOME_PENDING)
     {
@@ -133,20 +136,27 @@ void event_proc_send_data_through_lora()
 void event_proc_send_data_to_host()
 {
     s_host_Counter++;
+    s_host_SourceAddress++;
+    s_toggler_wheel++;
+
+    if(s_host_SourceAddress == s_lora_MyAddress) s_host_SourceAddress++;
+    if(s_host_SourceAddress > MAX_DESTINATION_ADDRESS) s_host_SourceAddress=0;
+    if(s_toggler_wheel > 6) s_toggler_wheel=0;
+    
 
     printf("\n\n___________ HOST BEGIN %d ___________\n", s_host_Counter);
 
     uint16_t outReplyPayload=0xFFFF;
 
-    int outcome = send_host_request(s_host_Counter, &outReplyPayload);
+    int outcome = send_host_request(s_host_Counter, s_host_SourceAddress, s_toggler_wheel!=0, &outReplyPayload);
 
     printf("__________ HOST END %d (0x%X) __________\n", outcome, outReplyPayload);
 }
 
 void btn_interrupt_handler()
 {
-    if(s_toggler) s_eq_main.call(event_proc_send_data_through_lora);
-    else s_eq_main.call(event_proc_send_data_to_host);
+    /*if(s_toggler) s_eq_main.call(event_proc_send_data_through_lora);
+    else */s_eq_main.call(event_proc_send_data_to_host);
 
     s_toggler=!s_toggler;
 }
@@ -156,23 +166,33 @@ void lora_state_machine_notify_request_payload_callback_instance(uint16_t reques
     printf("lora_state_machine_notify_request_payload_callback_instance: %u\n", requestPayload);
 }
 
+uint16_t loraGetReplyPayloadForRequestPayload(uint16_t requestPayload)
+{
+    return requestPayload;
+}
+
 uint16_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback_instance(uint16_t requestPayload)
 {
     printf("lora_state_machine_notify_request_payload_and_get_reply_payload_callback_instance: %u...returning %u\n", requestPayload, requestPayload);
 
+    return loraGetReplyPayloadForRequestPayload(requestPayload);
+}
+
+void host_state_machine_notify_request_payload_callback_instance(uint8_t requestSourceAddress, uint16_t requestPayload)
+{
+    printf("host_state_machine_notify_request_payload_callback: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
+}
+
+uint16_t hostGetReplyPayloadForRequestPayload(uint16_t requestPayload)
+{
     return requestPayload;
 }
 
-void host_state_machine_notify_request_payload_callback_instance(uint16_t requestPayload)
+uint16_t host_state_machine_notify_request_payload_and_get_reply_payload_callback_instance(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
-    printf("host_state_machine_notify_request_payload_callback_instance: %u\n", requestPayload);
-}
+    printf("host_state_machine_notify_request_payload_and_get_reply_payload_callback: Source=%u, Payload=%u...returning %u\n", requestSourceAddress, requestPayload, requestPayload);
 
-uint16_t host_state_machine_notify_request_payload_and_get_reply_payload_callback_instance(uint16_t requestPayload)
-{
-    printf("host_state_machine_notify_request_payload_and_get_reply_payload_callback_instance: %u...returning %u\n", requestPayload, requestPayload);
-
-    return requestPayload;
+    return hostGetReplyPayloadForRequestPayload(requestPayload);
 }
  
 int main( void ) 

@@ -56,14 +56,14 @@ static inline void updateAndNotifyConditionOutcome(HostReplyOutcomes_t outcome, 
     host_reply_cond_var_mutex.unlock();
 }
 
-static void notify_request_payload(uint16_t requestPayload)
+static void notify_request_payload(uint8_t requestDestinationAddress, uint16_t requestPayload)
 {
-    if(host_state_machine_notify_request_payload_callback) host_state_machine_notify_request_payload_callback(requestPayload);
+    if(host_state_machine_notify_request_payload_callback) host_state_machine_notify_request_payload_callback(requestDestinationAddress, requestPayload);
 }
 
-static uint16_t notify_request_payload_and_get_reply_payload(uint16_t requestPayload)
+static uint16_t notify_request_payload_and_get_reply_payload(uint8_t requestDestinationAddress, uint16_t requestPayload)
 {
-    if(host_state_machine_notify_request_payload_and_get_reply_payload_callback) return host_state_machine_notify_request_payload_and_get_reply_payload_callback(requestPayload);
+    if(host_state_machine_notify_request_payload_and_get_reply_payload_callback) return host_state_machine_notify_request_payload_and_get_reply_payload_callback(requestDestinationAddress, requestPayload);
     
     return 0;
 }
@@ -81,6 +81,8 @@ void host_event_proc_communication_cycle()
 
     uint16_t requestPayload;
     uint16_t replyPayload;
+    uint8_t requestDestinationAddress;
+    uint8_t replyDestinationAddress;
 
     char dumpBuffer[HOST_MESSAGES_BUFFER_SIZE];
 
@@ -123,13 +125,14 @@ void host_event_proc_communication_cycle()
 
             printf("*** HOST REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
             
+            requestDestinationAddress = host_protocol_get_latest_received_request_destination_address();
             requestPayload = host_protocol_get_latest_received_request_payload();
 
             if(!host_protocol_should_i_reply_to_latest_received_request())
             {
                 printf("...but I should not reply to host\n");
 
-                notify_request_payload(requestPayload);
+                notify_request_payload(requestDestinationAddress, requestPayload);
 
                 setState(INITIAL);
                 
@@ -138,10 +141,10 @@ void host_event_proc_communication_cycle()
 
             printf("...AND I SHOULD REPLY TO HOST...\n");
 
-            replyPayload = notify_request_payload_and_get_reply_payload(requestPayload);
+            replyPayload = notify_request_payload_and_get_reply_payload(requestDestinationAddress, requestPayload);
             
             // Send the REPLY frame
-            host_protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload);
+            host_protocol_fill_create_reply_buffer(buffer, bufferSize, replyPayload, requestDestinationAddress);
             host_protocol_send_reply_command(buffer, bufferSize);
 
             setState(TX_DONE_SENT_REPLY);
@@ -208,7 +211,7 @@ void host_event_proc_communication_cycle()
     }
 }
 
-HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter)
+HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t argSourceAddress, bool argRequiresReply)
 {
     uint16_t bufferSize=HOST_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[HOST_MESSAGES_BUFFER_SIZE];
@@ -216,7 +219,7 @@ HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter)
     if(getState() != RX_WAITING_FOR_REQUEST) return HOST_OUTCOME_INVALID_STATE;
     
     // Send the REQUEST frame
-    host_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter);
+    host_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argSourceAddress, argRequiresReply);
     host_protocol_send_request_command(buffer, bufferSize);
 
     setState(TX_DONE_SENT_REQUEST);

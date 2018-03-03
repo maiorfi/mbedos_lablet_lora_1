@@ -1,7 +1,5 @@
 #include "mbed.h"
 
-#include <string>
-
 #include "BufferedSerial.h"
 
 #include "host_protocol_impl.h"
@@ -9,6 +7,8 @@
 static Timer s_timer_1;
 
 #define PROTOCOL_BUFFER_SIZE 32
+#define PROTOCOL_PROC_COMMUNICATION_CYCLE_INTERVAL 20
+#define PROTOCOL_UART_BAUD_RATE 115200
 
 BufferedSerial pc_buffered_serial(PB_10, PB_11);
 
@@ -25,6 +25,8 @@ static int current_protocol_timeout_event_id;
 
 static std::string s_latest_received_command, s_latest_sent_command;
 
+static std::vector<std::string> s_latest_received_vector, s_latest_sent_vector;
+
 void event_proc_protocol_timeout_handler()
 {
     current_protocol_content.clear();
@@ -40,6 +42,8 @@ void event_proc_command_handler(std::string *pcontent)
     //if (pcontent->size() != 0) printf("[HOST COMMAND_HANDLER - %d] Ricevuto Comando: '%s'\n", s_timer_1.read_ms(), pcontent->c_str());
 
     s_latest_received_command = *pcontent;
+
+    split(s_latest_received_command.c_str(), s_latest_received_vector, '|');
 
     if(host_protocol_notify_command_received_callback_instance) host_protocol_notify_command_received_callback_instance();
 
@@ -66,8 +70,7 @@ void event_proc_protocol_worker()
                     case '!':
                         current_protocol_content.clear();
                         current_protocol_state = WAITING_END;
-                        if (current_protocol_timeout_event_id != 0)
-                            s_eq_serial_worker.cancel(current_protocol_timeout_event_id);
+                        if (current_protocol_timeout_event_id != 0) s_eq_serial_worker.cancel(current_protocol_timeout_event_id);
                         current_protocol_timeout_event_id = s_eq_serial_worker.call_in(PROTOCOL_TIMEOUT_MS, event_proc_protocol_timeout_handler);
 
                         //printf("[PROTOCOL_HANDLER - %d] Stato Settato a 'WAITING_END'\n", s_timer_1.read_ms());
@@ -115,9 +118,9 @@ void event_proc_protocol_worker()
 
 void host_protocol_initialize(EventQueue* eventQueue)
 {
-    pc_buffered_serial.baud(115200);
+    pc_buffered_serial.baud(PROTOCOL_UART_BAUD_RATE);
 
-    s_eq_serial_worker.call_every(100, event_proc_protocol_worker);
+    s_eq_serial_worker.call_every(PROTOCOL_PROC_COMMUNICATION_CYCLE_INTERVAL, event_proc_protocol_worker);
     s_thread_serial_worker.start(callback(&s_eq_serial_worker, &EventQueue::dispatch_forever));
 
     s_p_eq_command_handler_worker = eventQueue; 
@@ -127,6 +130,10 @@ void host_protocol_initialize(EventQueue* eventQueue)
 
 void host_protocol_reset()
 {
+    current_protocol_content.clear();
+    current_protocol_state = WAITING_START;
+    if (current_protocol_timeout_event_id != 0) s_eq_serial_worker.cancel(current_protocol_timeout_event_id);
+    current_protocol_timeout_event_id = 0;
 }
 
 void host_protocol_fill_with_rx_buffer_dump(char* destBuffer, size_t destBufferSize)
@@ -145,12 +152,22 @@ void host_protocol_fill_with_tx_buffer_dump(char* destBuffer, uint8_t* txBuffer,
 
 uint16_t host_protocol_get_latest_received_reply_payload()
 {
-    return atoi(s_latest_received_command.c_str());
+    return atoi(s_latest_received_vector[2].c_str());
+}
+
+uint8_t host_protocol_get_latest_received_reply_source_address()
+{
+    return atoi(s_latest_received_vector[1].c_str());
 }
 
 uint16_t host_protocol_get_latest_received_request_payload()
 {
-    return atoi(s_latest_received_command.c_str());
+    return atoi(s_latest_received_vector[2].c_str());
+}
+
+uint8_t host_protocol_get_latest_received_request_destination_address()
+{
+    return atoi(s_latest_received_vector[1].c_str());
 }
 
 uint16_t host_protocol_get_latest_sent_request_payload()
@@ -160,12 +177,12 @@ uint16_t host_protocol_get_latest_sent_request_payload()
 
 bool host_protocol_should_i_reply_to_latest_received_request()
 {
-    return host_protocol_get_latest_received_request_payload() % 2 == 0;
+    return s_latest_received_vector[0].compare("Q")==0;
 }
 
 bool host_protocol_should_i_wait_for_reply_for_latest_sent_request()
 {
-    return host_protocol_get_latest_sent_request_payload() % 2 == 0;
+    return s_latest_sent_vector[0].compare("Q")==0;
 }
 
 void host_protocol_send_request_command(uint8_t* buffer, uint16_t bufferSize)
@@ -173,6 +190,10 @@ void host_protocol_send_request_command(uint8_t* buffer, uint16_t bufferSize)
     pc_buffered_serial.write(buffer, strlen((const char*)buffer));
 
     s_latest_sent_command=(const char*)buffer;
+
+    s_latest_sent_command=s_latest_sent_command.substr(1,strlen((const char*)buffer)-2);
+
+    split(s_latest_sent_command.c_str(), s_latest_sent_vector, '|');
 }
 
 void host_protocol_send_reply_command(uint8_t* buffer, uint16_t bufferSize)
@@ -180,29 +201,49 @@ void host_protocol_send_reply_command(uint8_t* buffer, uint16_t bufferSize)
     pc_buffered_serial.write(buffer, strlen((const char*)buffer));
 
     s_latest_sent_command=(const char*)buffer;
+
+    s_latest_sent_command=s_latest_sent_command.substr(1,strlen((const char*)buffer)-2);
+
+    split(s_latest_sent_command.c_str(), s_latest_sent_vector, '|');
 }
 
-void host_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter)
+void host_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argPayload, uint8_t argSourceAddress, bool argRequiresReply)
 {
-    sprintf((char*)buffer,"^%u@", argCounter);
+    sprintf((char*)buffer,"^%s|%u|%u@", argRequiresReply ? "Q" : "C", argSourceAddress, argPayload);
 }
 
-void host_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t replyPayload)
+void host_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argPayload, uint8_t argDestinationAddress)
 {
-    sprintf((char*)buffer,"^%u@", replyPayload);
+    sprintf((char*)buffer,"^R|%u|%u@", argDestinationAddress, argPayload);
 }
 
 bool host_protocol_is_latest_received_command_a_request()
 {
-    return s_latest_received_command[0]!='0';
+    return s_latest_received_vector[0]=="Q" || s_latest_received_vector[0]=="C";
 }
 
 bool host_protocol_is_latest_received_command_a_reply()
 {
-    return s_latest_received_command[0]=='0';
+    return s_latest_received_vector[0]=="R";
 }
 
 bool host_protocol_is_latest_received_reply_right()
 {
-    return atoi(s_latest_received_command.c_str()) % 2 == 0;
+    return atoi(s_latest_received_vector[2].c_str()) >= 0;
+}
+
+void split(const char *str, std::vector<std::string>& v, char c = ' ')
+{
+    v.clear();
+
+    do
+    {
+        const char *begin = str;
+
+        while(*str != c && *str)
+            str++;
+
+        v.push_back(std::string(begin, str));
+
+    } while (0 != *str++);
 }
