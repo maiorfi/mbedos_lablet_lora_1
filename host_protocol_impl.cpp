@@ -15,7 +15,6 @@ BufferedSerial pc_buffered_serial(PB_10, PB_11);
 static Thread s_thread_serial_worker;
 static EventQueue s_eq_serial_worker;
 
-static Thread s_thread_command_handler_worker;
 static EventQueue* s_p_eq_command_handler_worker;
 
 #define PROTOCOL_TIMEOUT_MS (1000)
@@ -31,7 +30,7 @@ void event_proc_protocol_timeout_handler()
     current_protocol_content.clear();
     current_protocol_state = WAITING_START;
 
-    printf("[HOST PROTOCOL_HANDLER - %d] TIMEOUT (%u ms), Stato Settato a 'WAITING_START'\n", s_timer_1.read_ms(), PROTOCOL_TIMEOUT_MS);
+    //printf("[HOST PROTOCOL_HANDLER - %d] TIMEOUT (%u ms), Stato Settato a 'WAITING_START'\n", s_timer_1.read_ms(), PROTOCOL_TIMEOUT_MS);
 }
 
 host_protocol_notify_command_received_callback_t host_protocol_notify_command_received_callback_instance;
@@ -185,12 +184,12 @@ void host_protocol_send_reply_command(uint8_t* buffer, uint16_t bufferSize)
 
 void host_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter)
 {
-    sprintf((char*)buffer,"!%u#", argCounter);
+    sprintf((char*)buffer,"^%u@", argCounter);
 }
 
 void host_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t replyPayload)
 {
-    sprintf((char*)buffer,"!%u#", replyPayload);
+    sprintf((char*)buffer,"^%u@", replyPayload);
 }
 
 bool host_protocol_is_latest_received_command_a_request()

@@ -17,6 +17,9 @@ static EventQueue s_eq_manage_lora_communication;
 static Thread s_thread_manage_host_communication;
 static EventQueue s_eq_manage_host_communication;
 
+#define SEND_LORA_REQUEST_TIMEOUT 3000 // in ms
+#define SEND_HOST_REQUEST_TIMEOUT 3000 // in ms
+
 // Main
 static EventQueue s_eq_main;
 
@@ -30,12 +33,9 @@ static uint16_t s_host_Counter=0;
 
 #define MAX_DESTINATION_ADDRESS 4
 
-#define SEND_LORA_REQUEST_TIMEOUT 3000 // in ms
-#define SEND_HOST_REQUEST_TIMEOUT 3000 // in ms
-
 static bool s_toggler;
 
-ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress, uint16_t* outReplyPayload)
+LoraReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress, uint16_t* outReplyPayload)
 {
     Timer timer;
 
@@ -46,11 +46,11 @@ ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAdd
     bool timedOut=false;
     uint32_t timeLeft=SEND_LORA_REQUEST_TIMEOUT;
 
-    lora_reply_outcome=OUTCOME_PENDING;
+    lora_reply_outcome=LORA_OUTCOME_PENDING;
 
-    ReplyOutcomes_t outcome = lora_state_machine_send_request(argCounter, argDestinationAddress);
+    LoraReplyOutcomes_t outcome = lora_state_machine_send_request(argCounter, argDestinationAddress);
 
-    if(outcome != OUTCOME_PENDING)
+    if(outcome != LORA_OUTCOME_PENDING)
     {
         lora_reply_cond_var_mutex.unlock();
         return outcome;
@@ -63,11 +63,11 @@ ReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAdd
         uint32_t elapsed = timer.read_ms();
         timeLeft = elapsed > SEND_LORA_REQUEST_TIMEOUT ? 0 : SEND_LORA_REQUEST_TIMEOUT - elapsed;
 
-    } while(lora_reply_outcome == OUTCOME_PENDING && !timedOut);
+    } while(lora_reply_outcome == LORA_OUTCOME_PENDING && !timedOut);
 
-    outcome=timedOut ? OUTCOME_TIMEOUT_STUCK : lora_reply_outcome;
+    outcome=timedOut ? LORA_OUTCOME_TIMEOUT_STUCK : lora_reply_outcome;
 
-    if(outcome==OUTCOME_REPLY_RIGHT) *outReplyPayload = lora_reply_payload;
+    if(outcome==LORA_OUTCOME_REPLY_RIGHT) *outReplyPayload = lora_reply_payload;
 
     lora_reply_cond_var_mutex.unlock();
 

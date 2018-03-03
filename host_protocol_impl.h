@@ -11,9 +11,6 @@ extern host_protocol_notify_command_received_callback_t host_protocol_notify_com
 void host_protocol_initialize(EventQueue* eventQueue);
 void host_protocol_reset();
 
-void host_protocol_fill_with_rx_buffer_dump(char* destBuffer, size_t destBufferSize);
-void host_protocol_fill_with_tx_buffer_dump(char* destBuffer, uint8_t* txBuffer, size_t destBufferSize);
-
 uint16_t host_protocol_get_latest_received_reply_payload();
 uint16_t host_protocol_get_latest_received_request_payload();
 
@@ -30,3 +27,6 @@ void host_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize
 
 bool host_protocol_is_latest_received_command_a_request();
 bool host_protocol_is_latest_received_command_a_reply();
+
+void host_protocol_fill_with_rx_buffer_dump(char* destBuffer, size_t destBufferSize);
+void host_protocol_fill_with_tx_buffer_dump(char* destBuffer, uint8_t* txBuffer, size_t destBufferSize);

@@ -73,16 +73,16 @@ static Timer s_state_timer;
 
 Mutex lora_reply_cond_var_mutex;
 ConditionVariable lora_reply_cond_var(lora_reply_cond_var_mutex);
-ReplyOutcomes_t lora_reply_outcome;
+LoraReplyOutcomes_t lora_reply_outcome;
 uint16_t lora_reply_payload;
 
-notify_request_payload_callback_t lora_state_machine_notify_request_payload_callback;
-notify_request_payload_and_get_reply_payload_callback_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback;
+lora_notify_request_payload_callback_t lora_state_machine_notify_request_payload_callback;
+lora_notify_request_payload_and_get_reply_payload_callback_t lora_state_machine_notify_request_payload_and_get_reply_payload_callback;
 
 inline AppStates_t getState() { return State;}
 AppStates_t setState(AppStates_t newState) { AppStates_t previousState=State; State=newState; s_state_timer.reset(); return previousState;}
 
-inline void updateAndNotifyConditionOutcome(ReplyOutcomes_t outcome, uint16_t payload)
+inline void updateAndNotifyConditionOutcome(LoraReplyOutcomes_t outcome, uint16_t payload)
 {
     lora_reply_cond_var_mutex.lock();
     lora_reply_outcome=outcome;
@@ -216,7 +216,7 @@ void lora_event_proc_communication_cycle()
 
                     replyPayload = protocol_get_latest_received_reply_payload();
 
-                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_RIGHT, replyPayload);
+                    updateAndNotifyConditionOutcome(LORA_OUTCOME_REPLY_RIGHT, replyPayload);
 
                     setState(INITIAL);
                 }
@@ -224,7 +224,7 @@ void lora_event_proc_communication_cycle()
                 {
                     sx127x_debug_if( SX127x_DEBUG_ENABLED, "...BUT REPLY IS WRONG\n");
 
-                    updateAndNotifyConditionOutcome(OUTCOME_REPLY_WRONG, 0);
+                    updateAndNotifyConditionOutcome(LORA_OUTCOME_REPLY_WRONG, 0);
 
                     setState(INITIAL);
                 }
@@ -242,7 +242,7 @@ void lora_event_proc_communication_cycle()
             {
                 sx127x_debug_if( SX127x_DEBUG_ENABLED, "...but I should not wait for reply\n" );
 
-                updateAndNotifyConditionOutcome(OUTCOME_REPLY_NOT_NEEDED, 0);
+                updateAndNotifyConditionOutcome(LORA_OUTCOME_REPLY_NOT_NEEDED, 0);
 
                 setState(INITIAL);
 
@@ -279,12 +279,12 @@ void lora_event_proc_communication_cycle()
     }
 }
 
-ReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress)
+LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress)
 {
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
 
-    if(getState() != RX_WAITING_FOR_REQUEST) return OUTCOME_INVALID_STATE;
+    if(getState() != RX_WAITING_FOR_REQUEST) return LORA_OUTCOME_INVALID_STATE;
 
     // Send the REQUEST frame
     protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress);
@@ -299,7 +299,7 @@ ReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t arg
 
     Radio.Send( buffer, bufferSize );
 
-    return OUTCOME_PENDING;
+    return LORA_OUTCOME_PENDING;
 }
 
 void OnTxDone( void )
@@ -363,11 +363,11 @@ void OnTxTimeout( void )
 
     if(getState() == TX_WAITING_FOR_REQUEST_SENT)
     {
-        updateAndNotifyConditionOutcome(OUTCOME_TIMEOUT_WAITING_FOR_REQUEST_SENT, 0);
+        updateAndNotifyConditionOutcome(LORA_OUTCOME_TIMEOUT_WAITING_FOR_REQUEST_SENT, 0);
     }
     else if(getState() == TX_WAITING_FOR_REPLY_SENT)
     {
-        updateAndNotifyConditionOutcome(OUTCOME_TIMEOUT_WAITING_FOR_REPLY_SENT, 0);
+        updateAndNotifyConditionOutcome(LORA_OUTCOME_TIMEOUT_WAITING_FOR_REPLY_SENT, 0);
     }
     
     setState(INITIAL);
@@ -387,7 +387,7 @@ void OnRxTimeout( void )
     {
         sx127x_debug_if(SX127x_DEBUG_ENABLED , "...rx TIMEOUT while WAITING for REPLY: restarting waiting for request...\n" );
 
-        updateAndNotifyConditionOutcome(OUTCOME_WAITING_FOR_REPLY_TIMEOUT, 0);
+        updateAndNotifyConditionOutcome(LORA_OUTCOME_WAITING_FOR_REPLY_TIMEOUT, 0);
     }
 
     Radio.Sleep();
