@@ -21,3 +21,7 @@ HOST1 invia (tramite uart) __"!Q|2|202#"__ (Comando a indirizzo 2 con payload 20
 ## Test LORA-2-HOST
 
 > premendo il pulsante blu viene inviato un messaggio su rete lora ad un indirizzo che "ruota" tra 0 (broadcast) e 4 (definito da un #define nel main.cpp) escludendo il proprio indirizzo. Il payload del messaggio è un contatore. Per tutti i messaggi non broadcast (ergo con indirizzo di destinazione diverso da 0) è atteso un ack (reply con payload con bit 15 a 0) o un nack (reply con payload con bit 15 a 1) 
+
+## Test automatico (con RealTerm)
+
+> vanno aperte due istanze di RealTerm configurate per aprire ciascuna una connessione host-uart (default 115200 8-N-1) e vanno poi lanciati gli script "serial_test_script_nodo_1.txt" e "serial_test_script_nodo_2.txt" rispettivamente sugli host con indirizzo 1 e 2, con ritardo di riga a 1000ms e avviamento 1->2 entro 100-200 ms 
