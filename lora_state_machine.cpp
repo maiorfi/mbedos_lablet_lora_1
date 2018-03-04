@@ -114,7 +114,7 @@ void lora_event_proc_communication_cycle()
 
     if(elapsed_ms > STATE_MACHINE_STALE_STATE_TIMEOUT)
     {
-        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...(state-machine timeout, resetting to initial state)...\n" );
+        sx127x_debug_if( SX127x_DEBUG_ENABLED, "...(lora state-machine timeout, resetting to initial state)...\n" );
 
         setState(INITIAL);
     }
@@ -152,7 +152,7 @@ void lora_event_proc_communication_cycle()
 
             lora_protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-            sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** LORA REQUEST RECEIVED : '%s' ***\n", dumpBuffer);
             
             if(!lora_protocol_is_latest_received_request_for_me())
             {
@@ -200,7 +200,7 @@ void lora_event_proc_communication_cycle()
 
             lora_protocol_fill_with_rx_buffer_dump(dumpBuffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-            sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** REPLY RECEIVED ('%s') ***\n", dumpBuffer);
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** LORA REPLY RECEIVED ('%s') ***\n", dumpBuffer);
             
             if(!lora_protocol_is_latest_received_reply_for_me())
             {
@@ -237,7 +237,7 @@ void lora_event_proc_communication_cycle()
 
         case TX_DONE_SENT_REQUEST:
 
-            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...request sent...\n" );
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...lora request sent...\n" );
 
             Radio.Sleep();
 
@@ -262,7 +262,7 @@ void lora_event_proc_communication_cycle()
 
         case TX_DONE_SENT_REPLY:
 
-            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...REPLY SENT\n" ); 
+            sx127x_debug_if( SX127x_DEBUG_ENABLED, "...LORA REPLY SENT\n" ); 
            
             setState(INITIAL);
             
@@ -296,7 +296,7 @@ LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t
 
     lora_protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-    sx127x_debug_if( SX127x_DEBUG_ENABLED, "\n*** SEND REQUEST : '%s' ***\n", dumpBuffer);
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "\n*** LORA SEND REQUEST : '%s' ***\n", dumpBuffer);
 
     setState(TX_WAITING_FOR_REQUEST_SENT);
 

@@ -24,5 +24,5 @@ extern host_notify_request_callback_t host_state_machine_notify_request_callback
 extern host_notify_request_and_get_reply_callback_t host_state_machine_notify_request_and_get_reply_callback;
 
 int host_state_machine_initialize(EventQueue* eventQueue);
-HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t argSourceAddress, bool argRequiresReply);
+HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t argLoraDestinationAddress, bool argRequiresReply);
 void host_event_proc_communication_cycle();

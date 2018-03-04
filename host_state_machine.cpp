@@ -211,7 +211,7 @@ void host_event_proc_communication_cycle()
     }
 }
 
-HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t argSourceAddress, bool argRequiresReply)
+HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t argLoraDestinationAddress, bool argRequiresReply)
 {
     uint16_t bufferSize=HOST_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[HOST_MESSAGES_BUFFER_SIZE];
@@ -219,7 +219,7 @@ HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t
     if(getState() != RX_WAITING_FOR_REQUEST) return HOST_OUTCOME_INVALID_STATE;
     
     // Send the REQUEST frame
-    host_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argSourceAddress, argRequiresReply);
+    host_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argLoraDestinationAddress, argRequiresReply);
     host_protocol_send_request_command(buffer, bufferSize);
 
     setState(TX_DONE_SENT_REQUEST);

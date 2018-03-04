@@ -161,6 +161,7 @@ void btn_interrupt_handler()
     s_toggler=!s_toggler;
 }
 
+/*
 void on_lora_state_machine_notify_request_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
 {
     printf("lora_state_machine_notify_request_payload_callback: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
@@ -180,9 +181,9 @@ uint16_t on_lora_state_machine_notify_request_and_get_reply_callback(uint8_t req
     return replyPayload;
 }
 
-void on_host_state_machine_notify_request_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
+void on_host_state_machine_notify_request_callback(uint8_t requestLoraDestinationAddress, uint16_t requestPayload)
 {
-    printf("host_state_machine_notify_request_payload_callback: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
+    printf("host_state_machine_notify_request_payload_callback: LoraTargetAddress=%u, Payload=%u\n", requestLoraDestinationAddress, requestPayload);
 }
 
 uint16_t hostGetReplyPayloadForRequestPayload(uint16_t requestPayload)
@@ -190,13 +191,61 @@ uint16_t hostGetReplyPayloadForRequestPayload(uint16_t requestPayload)
     return requestPayload;
 }
 
-uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
+uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t requestLoraDestinationAddress, uint16_t requestPayload)
 {
     uint16_t replyPayload = hostGetReplyPayloadForRequestPayload(requestPayload);;
     
-    printf("host_state_machine_notify_request_payload_and_get_reply_payload_callback: Source=%u, Payload=%u...returning %u\n", requestSourceAddress, requestPayload, replyPayload);
+    printf("host_state_machine_notify_request_payload_and_get_reply_payload_callback: LoraTargetAddress=%u, Payload=%u...returning %u\n", requestLoraDestinationAddress, requestPayload, replyPayload);
 
     return replyPayload;
+}*/
+
+void on_lora_state_machine_notify_request_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
+{
+    printf("<<< COMMAND RECEIVED through LORA channel: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
+
+    uint16_t outReplyPayload=0xFFFF;
+
+    int outcome = send_host_request(requestPayload, requestSourceAddress, false, &outReplyPayload);
+
+    printf(">>> COMMAND SENT to HOST: Outcome=%d, ReplyPayload=0x%X\n", outcome, outReplyPayload);
+}
+
+uint16_t on_lora_state_machine_notify_request_and_get_reply_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
+{
+    printf("<<< QUERY RECEIVED through LORA channel: Source=%u, Payload=%u\n", requestSourceAddress, requestPayload);
+
+    uint16_t outReplyPayload=0xFFFF;
+
+    int outcome = send_host_request(requestPayload, requestSourceAddress, true, &outReplyPayload);
+
+    printf(">>> QUERY SENT to HOST: Outcome=%d, RETURNING ReplyPayload=0x%X\n", outcome, outReplyPayload);
+
+    return outReplyPayload;
+}
+
+void on_host_state_machine_notify_request_callback(uint8_t requestLoraDestinationAddress, uint16_t requestPayload)
+{
+    printf("<<< COMMAND RECEIVED from HOST: LoraTargetAddress=%u, Payload=%u\n", requestLoraDestinationAddress, requestPayload);
+
+    uint16_t outReplyPayload=0xFFFF;
+
+    int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, &outReplyPayload);
+
+    printf(">>> COMMAND SENT to LORA node: Outcome=%d, ReplyPayload=0x%X\n", outcome, outReplyPayload);
+}
+
+uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t requestLoraDestinationAddress, uint16_t requestPayload)
+{
+   printf("<<< QUERY RECEIVED from HOST: LoraTargetAddress=%u, Payload=%u\n", requestLoraDestinationAddress, requestPayload);
+
+    uint16_t outReplyPayload=0xFFFF;
+
+    int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, &outReplyPayload);
+
+    printf(">>> QUERY SENT to LORA node: Outcome=%d, RETURNING ReplyPayload=0x%X\n", outcome, outReplyPayload);
+
+    return outReplyPayload;
 }
  
 int main( void ) 
