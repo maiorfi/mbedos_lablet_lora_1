@@ -16,7 +16,7 @@ HOST1 invia (tramite uart) __"C|0|303"__ (Comando a indirizzo 0, ergo broadcasat
 
 #### Test invio query (con ack) ad uno specifico nodo LORA
 
-HOST1 invia (tramite uart) __"Q|2|202#"__ (Comando a indirizzo 2 con payload 202) -> ad HOST2 deve arrivare __"^Q|1|202@"__ (il secondo item, 1, rappresenta l'indirizzo lora mittente del comando) -> HOST2 invia (tramite uart) __"!R||0#"__ (ultimo item >=0 significa ack positivo) oppure __"!R||-1#"__ (ultimo item <0 significa ack negativo) -> ad HOST1 deve arrivare __"^R|2|0"__ (se è stato inviato un ack positivo) o __"^R|2|65535"__ (in caso di invio di ack negativo). __NOTA:__ I payload degli "ack" vengono inviati non alterati, ma dal lato dell'host sono considerati interi con segno, mentre dal lato del nodo lora sono interi senza segno a 16 bit.
+HOST1 invia (tramite uart) __"Q|2|202#"__ (Comando a indirizzo 2 con payload 202) -> ad HOST2 deve arrivare __"^Q|1|202@"__ (il secondo item, 1, rappresenta l'indirizzo lora mittente del comando) -> HOST2 invia (tramite uart) __"!R||0#"__ (ultimo item >=0 significa ack positivo) oppure __"!R||-1#"__ (ultimo item <0 significa ack negativo) -> ad HOST1 deve arrivare __"^R|2|0@"__ (se è stato inviato un ack positivo) o __"^R|2|65535@"__ (in caso di invio di ack negativo). __NOTA:__ I payload degli "ack" vengono inviati non alterati, ma dal lato dell'host sono considerati interi con segno, mentre dal lato del nodo lora sono interi senza segno a 16 bit.
 
 ## Test LORA-2-HOST
 
