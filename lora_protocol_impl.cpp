@@ -54,7 +54,7 @@ void lora_protocol_fill_create_reply_buffer(uint8_t* buffer, uint16_t bufferSize
 
 bool lora_protocol_is_latest_received_reply_right()
 {
-    return LatestReceivedReplyCounter==Counter;
+    return !(LatestReceivedReplyCounter & 0x8000);
 }
 
 uint16_t lora_protocol_get_latest_received_reply_payload()

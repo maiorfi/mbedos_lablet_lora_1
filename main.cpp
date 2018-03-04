@@ -155,10 +155,10 @@ void event_proc_send_data_to_host()
 
 void btn_interrupt_handler()
 {
-    if(s_toggler) s_eq_main.call(event_proc_send_data_through_lora);
-    else s_eq_main.call(event_proc_send_data_to_host);
+    /*if(s_toggler)*/ s_eq_main.call(event_proc_send_data_through_lora);
+    /*else s_eq_main.call(event_proc_send_data_to_host);
 
-    s_toggler=!s_toggler;
+    s_toggler=!s_toggler;*/
 }
 
 /*
@@ -208,7 +208,7 @@ void on_lora_state_machine_notify_request_callback(uint8_t requestSourceAddress,
 
     int outcome = send_host_request(requestPayload, requestSourceAddress, false, &outReplyPayload);
 
-    printf(">>> COMMAND SENT to HOST: Outcome=%d, ReplyPayload=0x%X\n", outcome, outReplyPayload);
+    printf(">>> COMMAND SENT to HOST: Outcome=%d, ReplyPayload=%u\n", outcome, outReplyPayload);
 }
 
 uint16_t on_lora_state_machine_notify_request_and_get_reply_callback(uint8_t requestSourceAddress, uint16_t requestPayload)
@@ -219,7 +219,7 @@ uint16_t on_lora_state_machine_notify_request_and_get_reply_callback(uint8_t req
 
     int outcome = send_host_request(requestPayload, requestSourceAddress, true, &outReplyPayload);
 
-    printf(">>> QUERY SENT to HOST: Outcome=%d, RETURNING ReplyPayload=0x%X\n", outcome, outReplyPayload);
+    printf(">>> QUERY SENT to HOST: Outcome=%d, RETURNING ReplyPayload=%u\n", outcome, outReplyPayload);
 
     return outReplyPayload;
 }
@@ -232,7 +232,7 @@ void on_host_state_machine_notify_request_callback(uint8_t requestLoraDestinatio
 
     int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, &outReplyPayload);
 
-    printf(">>> COMMAND SENT to LORA node: Outcome=%d, ReplyPayload=0x%X\n", outcome, outReplyPayload);
+    printf(">>> COMMAND SENT to LORA node: Outcome=%d, ReplyPayload=%u\n", outcome, outReplyPayload);
 }
 
 uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t requestLoraDestinationAddress, uint16_t requestPayload)
@@ -243,7 +243,7 @@ uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t req
 
     int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, &outReplyPayload);
 
-    printf(">>> QUERY SENT to LORA node: Outcome=%d, RETURNING ReplyPayload=0x%X\n", outcome, outReplyPayload);
+    printf(">>> QUERY SENT to LORA node: Outcome=%d, RETURNING ReplyPayload=%u\n", outcome, outReplyPayload);
 
     return outReplyPayload;
 }

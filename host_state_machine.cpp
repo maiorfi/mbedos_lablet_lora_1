@@ -220,6 +220,13 @@ HostReplyOutcomes_t host_state_machine_send_request(uint16_t argCounter, uint8_t
     
     // Send the REQUEST frame
     host_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argLoraDestinationAddress, argRequiresReply);
+    
+    char dumpBuffer[HOST_MESSAGES_BUFFER_SIZE];
+
+    host_protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, HOST_MESSAGES_BUFFER_SIZE);
+
+    printf("*** HOST SEND REQUEST : '%s' ***\n", dumpBuffer);
+    
     host_protocol_send_request_command(buffer, bufferSize);
 
     setState(TX_DONE_SENT_REQUEST);

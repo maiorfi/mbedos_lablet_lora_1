@@ -296,7 +296,7 @@ LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t
 
     lora_protocol_fill_with_tx_buffer_dump(dumpBuffer, buffer, RADIO_MESSAGES_BUFFER_SIZE);
 
-    sx127x_debug_if( SX127x_DEBUG_ENABLED, "\n*** LORA SEND REQUEST : '%s' ***\n", dumpBuffer);
+    sx127x_debug_if( SX127x_DEBUG_ENABLED, "*** LORA SEND REQUEST : '%s' ***\n", dumpBuffer);
 
     setState(TX_WAITING_FOR_REQUEST_SENT);
 
