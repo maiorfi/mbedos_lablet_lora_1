@@ -12,7 +12,7 @@ Per la compilazione occorre abilitare il il supporto a C++11 modificando i file 
 
 #### Test invio comando (senza ack) in broadcast a tutta la rete LORA
 
-HOST1 invia (tramite uart) __"!C|0|303#"__ (Comando a indirizzo 0, ergo broadcast, con payload 303) -> a tutti gli host della rete lora deve arrivare __"^C|1|303@"__ (il secondo item, 1, rappresenta l'indirizzo lora mittente del comando)
+HOST1 invia (tramite uart) __"!C|0|303#"__ (Comando a indirizzo 0, ergo broadcast, con payload 303) -> a tutti gli host della rete lora deve arrivare __"^C|1|303@"__ (il secondo item, 1, rappresenta l'indirizzo lora mittente del comando). Analogamente se HOST1 invia (tramite uart) __"!C|2|101#"__ -> ad HOST2 deve arrivare __"^C|1|101@"__.
 
 #### Test invio query (con ack) ad uno specifico nodo LORA
 
