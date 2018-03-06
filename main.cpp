@@ -32,13 +32,13 @@ static uint8_t s_lora_DestinationAddress=-1;
 static uint16_t s_host_Counter=-1;
 static uint8_t s_host_SourceAddress=-1;
 
-static int s_toggler_wheel=-1;
+static int s_lora_toggler_wheel=-1, s_host_toggler_wheel=-1;
 
 #define MAX_DESTINATION_ADDRESS 4
 
-static bool s_toggler;
+//static bool s_toggler;
 
-LoraReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress, uint16_t* outReplyPayload)
+LoraReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinationAddress, bool argRequiresReply, uint16_t* outReplyPayload)
 {
     Timer timer;
 
@@ -51,7 +51,7 @@ LoraReplyOutcomes_t send_lora_request(uint16_t argCounter, uint8_t argDestinatio
 
     lora_reply_outcome=LORA_OUTCOME_PENDING;
 
-    LoraReplyOutcomes_t outcome = lora_state_machine_send_request(argCounter, argDestinationAddress);
+    LoraReplyOutcomes_t outcome = lora_state_machine_send_request(argCounter, argDestinationAddress, argRequiresReply);
 
     if(outcome != LORA_OUTCOME_PENDING)
     {
@@ -120,15 +120,17 @@ void event_proc_send_data_through_lora()
 {
     s_lora_Counter++;
     s_lora_DestinationAddress++;
+    s_lora_toggler_wheel++;
 
     if(s_lora_DestinationAddress==s_lora_MyAddress) s_lora_DestinationAddress++;
     if(s_lora_DestinationAddress>MAX_DESTINATION_ADDRESS) s_lora_DestinationAddress=0;
+    if(s_lora_toggler_wheel > 6) s_lora_toggler_wheel=0;
 
     printf("\n\n___________ LORA BEGIN %d -> %d ___________\n", s_lora_Counter, s_lora_DestinationAddress);
 
     uint16_t outReplyPayload=0xFFFF;
 
-    int outcome = send_lora_request(s_lora_Counter, s_lora_DestinationAddress, &outReplyPayload);
+    int outcome = send_lora_request(s_lora_Counter, s_lora_DestinationAddress, s_lora_toggler_wheel!=0, &outReplyPayload);
 
     printf("__________ LORA END %d (0x%X) __________\n", outcome, outReplyPayload);
 }
@@ -137,18 +139,18 @@ void event_proc_send_data_to_host()
 {
     s_host_Counter++;
     s_host_SourceAddress++;
-    s_toggler_wheel++;
+    s_host_toggler_wheel++;
 
     if(s_host_SourceAddress == s_lora_MyAddress) s_host_SourceAddress++;
     if(s_host_SourceAddress > MAX_DESTINATION_ADDRESS) s_host_SourceAddress=0;
-    if(s_toggler_wheel > 6) s_toggler_wheel=0;
+    if(s_host_toggler_wheel > 6) s_host_toggler_wheel=0;
     
 
     printf("\n\n___________ HOST BEGIN %d ___________\n", s_host_Counter);
 
     uint16_t outReplyPayload=0xFFFF;
 
-    int outcome = send_host_request(s_host_Counter, s_host_SourceAddress, s_toggler_wheel!=0, &outReplyPayload);
+    int outcome = send_host_request(s_host_Counter, s_host_SourceAddress, s_host_toggler_wheel!=0, &outReplyPayload);
 
     printf("__________ HOST END %d (0x%X) __________\n", outcome, outReplyPayload);
 }
@@ -230,7 +232,7 @@ void on_host_state_machine_notify_request_callback(uint8_t requestLoraDestinatio
 
     uint16_t outReplyPayload=0xFFFF;
 
-    int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, &outReplyPayload);
+    int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, false, &outReplyPayload);
 
     printf(">>> COMMAND SENT to LORA node: Outcome=%d, ReplyPayload=%u\n", outcome, outReplyPayload);
 }
@@ -241,7 +243,7 @@ uint16_t on_host_state_machine_notify_request_and_get_reply_callback(uint8_t req
 
     uint16_t outReplyPayload=0xFFFF;
 
-    int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, &outReplyPayload);
+    int outcome = send_lora_request(requestPayload, requestLoraDestinationAddress, true, &outReplyPayload);
 
     printf(">>> QUERY SENT to LORA node: Outcome=%d, RETURNING ReplyPayload=%u\n", outcome, outReplyPayload);
 

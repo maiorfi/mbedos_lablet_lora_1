@@ -282,7 +282,7 @@ void lora_event_proc_communication_cycle()
     }
 }
 
-LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress)
+LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress, bool argRequiresReply)
 {
     uint16_t bufferSize=RADIO_MESSAGES_BUFFER_SIZE;
     uint8_t buffer[RADIO_MESSAGES_BUFFER_SIZE];
@@ -290,7 +290,7 @@ LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t
     if(getState() != RX_WAITING_FOR_REQUEST) return LORA_OUTCOME_INVALID_STATE;
 
     // Send the REQUEST frame
-    lora_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress);
+    lora_protocol_fill_create_request_buffer(buffer, bufferSize, argCounter, argDestinationAddress, argRequiresReply);
 
     char dumpBuffer[RADIO_MESSAGES_BUFFER_SIZE];
 

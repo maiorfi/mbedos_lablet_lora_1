@@ -18,8 +18,11 @@ static uint8_t LatestReceivedReplyDestinationAddress=0, LatestReceivedReplySourc
 
 static uint8_t MyAddress;
 
-static const uint8_t RequestMsg[] = "REQUEST-";
-static const uint8_t ReplyMsg[] = "REPLY-";
+static const uint8_t CommandMsg[] = "COMMAND-";
+static const uint8_t RequestMsg[] = "QUERY-";
+static const uint8_t ReplyMsg[] = "RESPONSE-";
+
+static bool s_latest_sent_request_requires_reply=false;
 
 void lora_protocol_initialize(uint8_t myAddress)
 {
@@ -39,7 +42,8 @@ bool lora_protocol_is_latest_received_request_for_me()
 
 bool lora_protocol_should_i_reply_to_latest_received_request()
 {
-    return LatestReceivedRequestDestinationAddress==MyAddress;
+    return strncmp((const char*)RxBuffer, (const char*)RequestMsg, strlen((const char*)RequestMsg)) == 0 && 
+        LatestReceivedRequestDestinationAddress==MyAddress;
 }
 
 bool lora_protocol_is_latest_received_reply_for_me()
@@ -78,17 +82,19 @@ uint8_t lora_protocol_get_latest_received_request_source_address()
 }
 
 void lora_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize,
-    uint16_t argCounter, uint8_t argDestinationAddress)
+    uint16_t argCounter, uint8_t argDestinationAddress, bool argRequiresReply)
 {
     Counter=argCounter;
     DestinationAddress=argDestinationAddress;
 
-    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)RequestMsg, Counter, MyAddress, DestinationAddress);
+    sprintf((char*)buffer, "%s%u|%u|%u",(const char*)(argRequiresReply ? RequestMsg : CommandMsg), Counter, MyAddress, DestinationAddress);
+
+    s_latest_sent_request_requires_reply = argRequiresReply;
 }
 
 bool lora_protocol_should_i_wait_for_reply_for_latest_sent_request()
 {
-    return DestinationAddress!=0;
+    return s_latest_sent_request_requires_reply && DestinationAddress!=0;
 }
 
 void lora_protocol_process_received_data(uint8_t *payload, uint16_t size)
@@ -100,7 +106,8 @@ void lora_protocol_process_received_data(uint8_t *payload, uint16_t size)
 
 bool lora_protocol_is_received_data_a_request()
 {
-    return strncmp((const char*)RxBuffer, (const char*)RequestMsg, strlen((const char*)RequestMsg)) == 0;
+    return strncmp((const char*)RxBuffer, (const char*)RequestMsg, strlen((const char*)RequestMsg)) == 0 ||
+        strncmp((const char*)RxBuffer, (const char*)CommandMsg, strlen((const char*)CommandMsg)) == 0;
 }
 
 void lora_protocol_process_received_data_as_request()

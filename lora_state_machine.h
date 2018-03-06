@@ -24,5 +24,5 @@ extern lora_notify_request_callback_t lora_state_machine_notify_request_callback
 extern lora_notify_request_and_get_reply_callback_t lora_state_machine_notify_request_and_get_reply_callback;
 
 int lora_state_machine_initialize(uint8_t myAddress, EventQueue* eventQueue);
-LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress);
+LoraReplyOutcomes_t lora_state_machine_send_request(uint16_t argCounter, uint8_t argDestinationAddress, bool argRequiresReply);
 void lora_event_proc_communication_cycle();

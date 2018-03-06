@@ -11,7 +11,7 @@ uint16_t lora_protocol_get_latest_received_reply_payload();
 uint16_t lora_protocol_get_latest_received_request_payload();
 uint8_t lora_protocol_get_latest_received_request_source_address();
 uint8_t lora_protocol_get_latest_received_reply_source_address();
-void lora_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter, uint8_t argDestinationAddress);
+void lora_protocol_fill_create_request_buffer(uint8_t* buffer, uint16_t bufferSize, uint16_t argCounter, uint8_t argDestinationAddress, bool argRequiresReply);
 void lora_protocol_process_received_data(uint8_t *payload, uint16_t size);
 bool lora_protocol_is_received_data_a_request();
 void lora_protocol_process_received_data_as_request();
